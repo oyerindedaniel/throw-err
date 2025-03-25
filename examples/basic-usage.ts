@@ -9,6 +9,7 @@ import {
   mapperFn,
   AsyncFnWithErr,
   composeFns,
+  isErrorType,
 } from "../src";
 
 // Custom error types
@@ -30,7 +31,7 @@ type NotFoundErrorInstance = InstanceType<typeof NotFoundError>;
 // Type for user data
 type User = { id: string; name: string; email: string };
 type UserFnArgs = readonly [id: string];
-type PostFnArgs = readonly [userId: string];
+// Type for post data
 type Post = { id: number; title: string };
 
 // Mock API function that might throw an ApiError
@@ -123,8 +124,8 @@ async function runExample() {
 
     // 2. Using mapResult to transform the result
     console.log("\n2. Transforming the result with mapResult:");
-    // Create a typed mapper function
-    const nameMapper = mapperFn<Error>()(
+
+    const nameMapper = mapperFn<ApiErrorInstance>()(
       (user: { id: string; name: string; email: string }) => user.name
     );
     const nameResult = await mapResult(userResult, nameMapper);
@@ -133,8 +134,62 @@ async function runExample() {
       nameResult.success ? nameResult.data : nameResult.error.message
     );
 
-    // 3. Using catchErr to recover from errors
-    console.log("\n3. Handling errors with catchErr:");
+    // 3. Using mapResult to transform the result with a custom error type
+    console.log("\n3. Transforming with mapResult and custom error type:");
+
+    // Define a custom format error for data transformation
+    interface FormatErrorData {
+      reason: string;
+      field: string;
+    }
+    const FormatError = mkErrClass<FormatErrorData>(
+      "FormatError",
+      "FORMAT_ERROR",
+      {
+        reason: "Unknown formatting error",
+        field: "unknown",
+      }
+    );
+    type FormatErrorInstance = InstanceType<typeof FormatError>;
+
+    // Create a mapper that might throw our custom error
+    const userProfileMapper = mapperFn<FormatErrorInstance>()((user: User) => {
+      if (!user.email.includes("@")) {
+        throw new FormatError("Invalid email format", {
+          data: {
+            reason: "Missing @ symbol",
+            field: "email",
+          },
+        });
+      }
+
+      // Transform the user into a profile object
+      return {
+        displayName: user.name.toUpperCase(),
+        contactEmail: user.email,
+        accountId: parseInt(user.id),
+        verified: user.email.endsWith(".com"),
+      };
+    });
+
+    // Apply the transformation - will return Result<Profile, ApiError | FormatError>
+    const profileResult = await mapResult(userResult, userProfileMapper);
+
+    if (profileResult.success) {
+      console.log("✅ User profile created:", profileResult.data);
+    } else {
+      if (isErrorType(profileResult.error.raw, FormatError)) {
+        console.log("❌ Formatting error:", profileResult.error.message);
+        console.log("   Reason:", profileResult.error.raw.data.reason);
+        console.log("   Field:", profileResult.error.raw.data.field);
+      } else {
+        console.log("❌ API error:", profileResult.error.message);
+        console.log("   Status:", profileResult.error.raw.data.status);
+      }
+    }
+
+    // 4. Using catchErr to recover from errors
+    console.log("\n4. Handling errors with catchErr:");
 
     // Recovery with same type
     const userWithFallback = await catchErr(
@@ -159,7 +214,7 @@ async function runExample() {
     console.log("User with fallback (different type):", userSummary);
 
     // Error transformation with catchErr
-    console.log("\n3.3. Transforming errors with catchErr:");
+    console.log("\n5. Transforming errors with catchErr:");
 
     // Create a unified application error
     const AppError = mkErrClass("AppError", "APP_ERROR");
@@ -192,8 +247,8 @@ async function runExample() {
       console.log("  Code:", transformedError.error.code);
     }
 
-    // 4. Using retry for unreliable operations
-    console.log("\n4. Retrying unreliable operations:");
+    // 6. Using retry for unreliable operations
+    console.log("\n6. Retrying unreliable operations:");
     const retriedResult = await retry(
       fetchUserApi,
       3, // 3 retries
@@ -207,8 +262,8 @@ async function runExample() {
         : `❌ Failed after all retries: ${retriedResult.error.message}`
     );
 
-    // 4. Composing functions
-    console.log("\n5. Composing functions:");
+    // 7. Composing functions
+    console.log("\n7. Composing functions:");
     const getUserWithPostsSimple = composeFns(fetchUserApi, (user) =>
       asyncFn<NotFoundErrorInstance>()(async () => {
         const posts = await fetchUserPosts.fn(user.id);
@@ -230,8 +285,8 @@ async function runExample() {
       );
     }
 
-    // 6. Composing functions with the new implementation
-    console.log("\n5. Composing functions with the new implementation:");
+    // 8. Composing functions with the new implementation
+    console.log("\n8. Composing functions with the new implementation:");
 
     // Using compose with wrappers
     const getUserWithPosts = compose<
