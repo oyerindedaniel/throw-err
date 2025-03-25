@@ -152,11 +152,11 @@ export async function catchErr<T, R, E extends Error, F extends Error>(
   ) => Promise<Result<R, F>> | Result<R, F>
 ): Promise<Result<T | R, F>> {
   if (!result.success) {
-    const handlerFn = asyncFn<F>()(async () => {
-      return await handler(result.error);
-    });
-
-    const handlerResult = await tryCatch(handlerFn);
+    const handlerResult = await tryCatch(
+      asyncFn<F>()(async () => {
+        return await handler(result.error);
+      })
+    );
 
     if (handlerResult.success) {
       return handlerResult.data;

@@ -70,7 +70,7 @@ const FetchError = mkErrClass<FetchErrorData>("FetchError", "FETCH_ERROR", {
 });
 
 function createFetchUser<T>() {
-  return asyncFn<InstanceType<typeof FetchError>>()<T, UserFnArgs>(
+  return asyncFn<InstanceType<typeof FetchError>>()<T>(
     async (id: string): Promise<T> => {
       const response: Response = await fetch(`/api/users/${id}`);
 
