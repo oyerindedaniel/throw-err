@@ -429,6 +429,66 @@ const fetchUserPosts = compose(fetchUser, (user) =>
 const result = await tryCatch(fetchUserPosts, "123");
 ```
 
+## Composition Functions
+
+The library provides three powerful composition functions that help you combine operations while preserving type safety:
+
+### `compose<T, E, Args, W1E, W2E, W3E>(...wrappers)(fn)`
+
+Compose multiple async function wrappers into a single wrapper with improved error type handling. This function properly tracks and accumulates error types from each wrapper.
+
+```typescript
+// Type-safe composition with explicit error types
+const getUserWithRetryAndTimeout = compose<
+  User, // Return type
+  UserError, // Base error type
+  [string], // Argument types
+  NetworkError, // Additional errors from withRetry
+  TimeoutError // Additional errors from withTimeout
+>(
+  withRetry,
+  withTimeout
+)(fetchUserById);
+
+// Result type is AsyncFnWithErr<User, UserError | NetworkError | TimeoutError, [string]>
+```
+
+### `composeMany<T, E, Args, WE>(...wrappers)(fn)`
+
+A variadic version of compose that supports an arbitrary number of wrappers. This version doesn't track specific error types from each wrapper but provides a simpler API for cases where precise error typing isn't needed.
+
+```typescript
+// Simpler composition for many wrappers
+const enhancedFn = composeMany<
+  User, // Return type
+  UserError, // Base error type
+  [string], // Argument types
+  NetworkError | TimeoutError // All possible additional errors
+>(
+  withRetry,
+  withTimeout,
+  withLogging,
+  withMetrics
+)(fetchUserById);
+```
+
+### `composeFns<T1, T2, E1, E2, Args1>(fn1, fn2)`
+
+Directly compose two async functions by passing the output of the first to the second while properly combining their error types:
+
+```typescript
+const fetchUserPosts = composeFns(fetchUser, (user) =>
+  asyncFn<PostError>()(async () => {
+    const response = await fetch(`/api/users/${user.id}/posts`);
+    if (!response.ok) throw new PostError("Failed to fetch posts");
+    return await response.json();
+  })
+);
+
+// Combined error type is UserError | PostError
+const result = await tryCatch(fetchUserPosts, "123");
+```
+
 ## Error Utilities
 
 ### mkErrClass<T>()
