@@ -10,6 +10,7 @@ import {
   AsyncFnWithErr,
   composeFns,
   isErrorType,
+  Result,
 } from "../src";
 
 // Custom error types
