@@ -27,11 +27,11 @@ export async function tryCatch<
 >(wrappedFn: AsyncFnWithErr<T, E, Args>, ...args: Args): Promise<Result<T, E>> {
   try {
     const data = await wrappedFn.fn(...args);
-    return { success: true, data };
+    return { success: true, data } as Result<T, never>;
   } catch (err) {
     return {
       success: false,
-      error: normalizeError(err),
-    };
+      error: normalizeError<E>(err),
+    } as Result<never, E>;
   }
 }
