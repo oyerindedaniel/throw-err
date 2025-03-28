@@ -35,3 +35,42 @@ export async function tryCatch<
     } as Result<never, E>;
   }
 }
+
+/**
+ * Synchronously executes a function and returns a Result
+ * @template T The success type
+ * @template E The error type
+ * @template Args The argument types
+ * @param fn The function to execute
+ * @param args The arguments to pass to the function
+ * @returns A Result containing the success value or error
+ * @example
+ * ```typescript
+ * // For synchronous functions
+ * const parseResult = tryCatchSync(
+ *   (text) => JSON.parse(text),
+ *   '{"name": "John"}'
+ * );
+ *
+ * if (parseResult.success) {
+ *   console.log(parseResult.data.name); // "John"
+ * } else {
+ *   console.error("Parse failed:", parseResult.error.message);
+ * }
+ * ```
+ */
+export function tryCatchSync<
+  T,
+  E extends Error,
+  Args extends readonly unknown[]
+>(fn: (...args: Args) => T, ...args: Args): Result<T, E> {
+  try {
+    const data = fn(...args);
+    return { success: true, data } as Result<T, never>;
+  } catch (err) {
+    return {
+      success: false,
+      error: normalizeError<E>(err),
+    } as Result<never, E>;
+  }
+}

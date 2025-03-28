@@ -9,8 +9,7 @@ import {
   mapperFn,
   AsyncFnWithErr,
   composeFns,
-  isErrorType,
-  Result,
+  createErrorTypeGuard,
 } from "../src";
 
 // Custom error types
@@ -28,6 +27,8 @@ const NotFoundError = mkErrClass("NotFoundError", "NOT_FOUND");
 // Types for the custom error instances
 type ApiErrorInstance = InstanceType<typeof ApiError>;
 type NotFoundErrorInstance = InstanceType<typeof NotFoundError>;
+
+const isApiError = createErrorTypeGuard(ApiError);
 
 // Type for user data
 type User = { id: string; name: string; email: string };
@@ -179,13 +180,14 @@ async function runExample() {
     if (profileResult.success) {
       console.log("✅ User profile created:", profileResult.data);
     } else {
-      if (isErrorType(profileResult.error.raw, FormatError)) {
-        console.log("❌ Formatting error:", profileResult.error.message);
-        console.log("   Reason:", profileResult.error.raw.data.reason);
-        console.log("   Field:", profileResult.error.raw.data.field);
-      } else {
+      if (isApiError(profileResult.error.raw)) {
         console.log("❌ API error:", profileResult.error.message);
         console.log("   Status:", profileResult.error.raw.data.status);
+        console.log("   URL:", profileResult.error.raw.data.url);
+      } else {
+        console.log("❌ Format error:", profileResult.error.message);
+        console.log("   Reason:", profileResult.error.raw.data.reason);
+        console.log("   Field:", profileResult.error.raw.data.field);
       }
     }
 

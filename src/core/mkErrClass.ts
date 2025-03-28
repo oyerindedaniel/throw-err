@@ -17,7 +17,7 @@ type ErrorClassReturn<T> = new (
  */
 export function mkErrClass(
   name: string,
-  defaultCode?: ErrorCode
+  defaultCode: ErrorCode
 ): ErrorClassReturn<Record<string, never>>;
 
 /**
@@ -54,7 +54,7 @@ export function mkErrClass<T extends object>(
  * const SimpleError = mkErrClass('SimpleError', 'SIMPLE_ERROR');
  * ```
  */
-export function mkErrClass<T extends object = Record<string, never>>(
+export function mkErrClass<T extends object = Record<never, never>>(
   name: string,
   defaultCode?: ErrorCode,
   defaultData?: T
@@ -63,6 +63,9 @@ export function mkErrClass<T extends object = Record<string, never>>(
     public readonly name: string = name;
     public readonly code: ErrorCode;
     public readonly data: T;
+
+    // Not used at runtime, only for compile-time type checking
+    readonly _errorType?: CustomError;
 
     constructor(message: string, options?: { code?: ErrorCode; data?: T }) {
       super(message);

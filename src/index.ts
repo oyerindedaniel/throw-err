@@ -14,7 +14,7 @@ export { MapperFn, mapperFn } from "./utils/mapperFn";
 
 // Core functions
 export { asyncFn } from "./core/asyncFn";
-export { tryCatch } from "./core/tryCatch";
+export { tryCatch, tryCatchSync } from "./core/tryCatch";
 export { mkErrClass } from "./core/mkErrClass";
 export { withCode } from "./core/withCode";
 export { compose, composeFns, composeMany } from "./core/compose";
@@ -22,9 +22,16 @@ export { compose, composeFns, composeMany } from "./core/compose";
 // Utility functions
 export {
   mapResult,
+  mapResultSync,
   flatMapResult,
+  flatMapResultSync,
   catchErr,
+  catchErrSync,
   mapErr,
+  recover,
+  filterResult,
+  collectResults,
+  CollectedErrors,
 } from "./utils/resultTransformers";
 
 export { retry, timeout, TimeoutError } from "./utils/asyncUtils";
@@ -32,7 +39,13 @@ export { retry, timeout, TimeoutError } from "./utils/asyncUtils";
 // export { compose } from "./utils/compose";
 
 // Error type checking utilities
-export { isErrorType, hasErrorName, hasProperty } from "./utils/errorTypeUtils";
+export {
+  isErrorType,
+  hasErrorName,
+  hasProperty,
+  createErrorTypeGuard,
+  createConstrainedErrorGuard,
+} from "./utils/errorTypeUtils";
 
 // Error normalization utilities
 export {

@@ -9,6 +9,7 @@ import {
   isErrorType,
   mapperFn,
   AsyncFnWithErr,
+  asyncFn,
 } from "../src";
 
 // Define complex error hierarchy
@@ -73,51 +74,45 @@ interface PostData {
 }
 
 type UserArgs = readonly [id: string, token?: string];
-type PostsArgs = readonly [userId: string];
 type UserWithPosts = User & { posts: Post[] };
 
 // API services with specific error types
 // User service that might throw network or auth errors
+
 const userService = {
-  getUser: new AsyncFnWithErr<
-    User,
-    NetworkErrorInstance | AuthErrorInstance,
-    UserArgs
-  >(async (id: string, token?: string) => {
-    console.log(`Fetching user ${id} with${token ? "" : "out"} token`);
+  getUser: asyncFn<NetworkErrorInstance | AuthErrorInstance>()(
+    async (id: string, token?: string) => {
+      console.log(`Fetching user ${id} with${token ? "" : "out"} token`);
 
-    // Auth error
-    if (id.startsWith("admin") && !token) {
-      throw new AuthError("Authentication required for admin users", {
-        data: {
-          requiredRole: "ADMIN",
-        },
-      });
+      // Auth error
+      if (id.startsWith("admin") && !token) {
+        throw new AuthError("Authentication required for admin users", {
+          data: {
+            requiredRole: "ADMIN",
+          },
+        });
+      }
+
+      // Network error
+      if (id === "error") {
+        throw new NetworkError("Failed to reach user service", {
+          data: {
+            url: "/api/users/error",
+            retryable: true,
+          },
+        });
+      }
+
+      return {
+        id,
+        name: `User ${id}`,
+        role: id.startsWith("admin") ? "ADMIN" : "USER",
+      } as User;
     }
-
-    // Network error
-    if (id === "error") {
-      throw new NetworkError("Failed to reach user service", {
-        data: {
-          url: "/api/users/error",
-          retryable: true,
-        },
-      });
-    }
-
-    return {
-      id,
-      name: `User ${id}`,
-      role: id.startsWith("admin") ? "ADMIN" : "USER",
-    } as User;
-  }),
+  ),
 
   // User validation that might throw validation errors
-  validateUser: new AsyncFnWithErr<
-    User,
-    ValidationErrorInstance,
-    readonly [User]
-  >(async (userData: User) => {
+  validateUser: asyncFn<ValidationErrorInstance>()(async (userData: User) => {
     if (!userData.name || userData.name.length < 3) {
       throw new ValidationError("Invalid user data", {
         data: {
@@ -134,38 +129,34 @@ const userService = {
 
 // Post service that might throw network or not found errors
 const postService = {
-  getPosts: new AsyncFnWithErr<
-    Post[],
-    NetworkErrorInstance | NotFoundErrorInstance,
-    PostsArgs
-  >(async (userId: string) => {
-    console.log(`Fetching posts for user ${userId}`);
+  getPosts: asyncFn<NetworkErrorInstance | NotFoundErrorInstance>()(
+    async (userId: string) => {
+      console.log(`Fetching posts for user ${userId}`);
 
-    if (userId === "noposts") {
-      throw new NotFoundError(`No posts found for user ${userId}`);
+      if (userId === "noposts") {
+        throw new NotFoundError(`No posts found for user ${userId}`);
+      }
+
+      if (userId === "error") {
+        throw new NetworkError("Failed to reach post service", {
+          data: {
+            url: "/api/posts",
+            retryable: false,
+          },
+        });
+      }
+
+      return [
+        { id: 1, title: `Post 1 for ${userId}` },
+        { id: 2, title: `Post 2 for ${userId}` },
+      ] as Post[];
     }
-
-    if (userId === "error") {
-      throw new NetworkError("Failed to reach post service", {
-        data: {
-          url: "/api/posts",
-          retryable: false,
-        },
-      });
-    }
-
-    return [
-      { id: 1, title: `Post 1 for ${userId}` },
-      { id: 2, title: `Post 2 for ${userId}` },
-    ] as Post[];
-  }),
+  ),
 
   // Post creation that might throw multiple error types
-  createPost: new AsyncFnWithErr<
-    Post,
-    NetworkErrorInstance | ValidationErrorInstance | AuthErrorInstance,
-    readonly [userId: string, postData: PostData, token?: string]
-  >(async (userId: string, postData: PostData, token?: string) => {
+  createPost: asyncFn<
+    NetworkErrorInstance | ValidationErrorInstance | AuthErrorInstance
+  >()(async (userId: string, postData: PostData, token?: string) => {
     // Check auth
     if (!token) {
       throw new AuthError("Authentication required to create posts", {
@@ -395,10 +386,7 @@ async function runAdvancedExample() {
     );
 
     const userToValidatedMapper = mapperFn<
-      | ValidationErrorInstance
-      | AuthErrorInstance
-      | NetworkErrorInstance
-      | NotFoundErrorInstance
+      ValidationErrorInstance | NetworkErrorInstance | NotFoundErrorInstance
     >()(async (user: User) => {
       const validationResult = await tryCatch(userService.validateUser, user);
       return flatMapResult(
@@ -426,24 +414,24 @@ async function runAdvancedExample() {
       // The type system knows this error could be from any of the three operations
       // Use the utility for proper type narrowing
       if (isErrorType(validatedWithPostsResult.error.raw, NetworkError)) {
-        console.log("   Network Error");
+        console.log("Network Error");
       } else if (
         isErrorType(validatedWithPostsResult.error.raw, ValidationError)
       ) {
         console.log(
-          "   Validation Error on field:",
+          "Validation Error on field:",
           validatedWithPostsResult.error.raw.data.field
         );
         console.log(
-          "   Constraints:",
+          "Constraints:",
           validatedWithPostsResult.error.raw.data.constraints
         );
       } else if (isErrorType(validatedWithPostsResult.error.raw, AuthError)) {
-        console.log("   Auth Error");
+        console.log("Auth Error");
       } else if (
         isErrorType(validatedWithPostsResult.error.raw, NotFoundError)
       ) {
-        console.log("   Not Found Error");
+        console.log("Not Found Error");
       }
     }
 
