@@ -1,16 +1,17 @@
 import {
   asyncFn,
-  tryCatch,
+  tryCatchAsync,
   mkErrClass,
   mapResult,
-  catchErr,
+  recoverWithResult,
   retry,
   compose,
   mapperFn,
   AsyncFnWithErr,
   composeFns,
   createErrorTypeGuard,
-} from "../src";
+  Result,
+} from "..";
 
 // Custom error types
 interface ApiErrorData extends Record<string, unknown> {
@@ -113,7 +114,7 @@ async function runExample() {
 
     // 1. Basic tryCatch usage
     console.log("\n1. Fetching a user:");
-    const userResult = await tryCatch(fetchUserApi, "123");
+    const userResult = await tryCatchAsync(fetchUserApi, "123");
 
     if (userResult.success) {
       console.log("✅ User fetched successfully:", userResult.data);
@@ -191,55 +192,53 @@ async function runExample() {
       }
     }
 
-    // 4. Using catchErr to recover from errors
-    console.log("\n4. Handling errors with catchErr:");
+    // 4. Using recoverWithResult to recover from errors
+    console.log("\n4. Handling errors with recoverWithResult:");
 
     // Recovery with same type
-    const userWithFallback = await catchErr(
-      await tryCatch(fetchUserApi, "999"), // This will likely fail
-      () => ({
-        success: true,
-        data: { id: "0", name: "Guest User", email: "guest@example.com" },
-      })
+    const userWithFallback = await recoverWithResult(
+      await tryCatchAsync(fetchUserApi, "999"), // This will likely fail
+      mapperFn<ApiErrorInstance>()(() =>
+        Result.success({
+          id: "0",
+          name: "Guest User",
+          email: "guest@example.com",
+        })
+      )
     );
 
     console.log("User with fallback (same type):", userWithFallback);
 
     // Recovery with different type
-    const userSummary = await catchErr(
-      await tryCatch(fetchUserApi, "999"), // This will likely fail
-      () => ({
-        success: true,
-        data: { displayName: "Guest", isAnonymous: true },
-      })
+    const userSummary = await recoverWithResult(
+      await tryCatchAsync(fetchUserApi, "999"), // This will likely fail
+      mapperFn<ApiErrorInstance>()(() =>
+        Result.success({
+          displayName: "Guest",
+          isAnonymous: true,
+        })
+      )
     );
 
     console.log("User with fallback (different type):", userSummary);
 
-    // Error transformation with catchErr
-    console.log("\n5. Transforming errors with catchErr:");
+    // Error transformation with recoverWithResult
+    console.log("\n5. Transforming errors with recoverWithResult:");
 
     // Create a unified application error
     const AppError = mkErrClass("AppError", "APP_ERROR");
-    type AppErrorInstance = InstanceType<typeof AppError>;
 
-    const transformedError = await catchErr<
-      { id: string; name: string; email: string },
-      never,
-      ApiErrorInstance,
-      AppErrorInstance
-    >(
-      await tryCatch(fetchUserApi, "999"), // This will fail with ApiError
-      (error) => ({
-        success: false,
-        error: {
+    const transformedError = await recoverWithResult(
+      await tryCatchAsync(fetchUserApi, "999"), // This will fail with ApiError
+      mapperFn<ApiErrorInstance>()((error) =>
+        Result.failure({
           raw: new AppError(
             `App error: ${error.message} (Code: ${error.code})`
           ),
           message: `User operation failed: ${error.message}`,
           code: "APP_ERROR",
-        },
-      })
+        })
+      )
     );
 
     if (!transformedError.success) {
@@ -277,7 +276,10 @@ async function runExample() {
       })
     );
 
-    const composedResultSimple = await tryCatch(getUserWithPostsSimple, "123");
+    const composedResultSimple = await tryCatchAsync(
+      getUserWithPostsSimple,
+      "123"
+    );
 
     if (composedResultSimple.success) {
       console.log("✅ User with posts:", composedResultSimple.data);
@@ -299,7 +301,7 @@ async function runExample() {
       NotFoundErrorInstance // Additional error type from the withPostsWrapper
     >(withPostsWrapper)(fetchUserApi);
 
-    const composedResult = await tryCatch(getUserWithPosts, "123");
+    const composedResult = await tryCatchAsync(getUserWithPosts, "123");
 
     if (composedResult.success) {
       console.log("✅ User with posts:", composedResult.data);

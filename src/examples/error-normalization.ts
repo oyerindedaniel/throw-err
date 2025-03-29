@@ -5,7 +5,7 @@ import {
   normalizeError,
   normalizeTypedError,
   isResultError,
-} from "../src";
+} from "..";
 
 // Create custom error types
 interface ApiErrorData extends Record<string, unknown> {

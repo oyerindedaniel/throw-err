@@ -1,6 +1,7 @@
 import { AsyncFnWithErr } from "./AsyncFnWithErr";
 import { Result } from "../types/Result";
 import { normalizeError } from "../utils/normalizeError";
+import { SyncFnWithErr } from "./SyncFnWithErr";
 
 /**
  * Executes a wrapped function and returns a Result
@@ -20,7 +21,7 @@ import { normalizeError } from "../utils/normalizeError";
  * }
  * ```
  */
-export async function tryCatch<
+export async function tryCatchAsync<
   T,
   E extends Error,
   Args extends readonly unknown[]
@@ -37,25 +38,22 @@ export async function tryCatch<
 }
 
 /**
- * Synchronously executes a function and returns a Result
+ * Synchronously executes a wrapped function and returns a Result
  * @template T The success type
  * @template E The error type
  * @template Args The argument types
- * @param fn The function to execute
+ * @param wrappedFn The wrapped synchronous function
  * @param args The arguments to pass to the function
  * @returns A Result containing the success value or error
  * @example
  * ```typescript
- * // For synchronous functions
- * const parseResult = tryCatchSync(
- *   (text) => JSON.parse(text),
- *   '{"name": "John"}'
- * );
- *
- * if (parseResult.success) {
- *   console.log(parseResult.data.name); // "John"
+ * const parseJson = (text: string) => JSON.parse(text);
+ * const wrappedParseJson = syncFn<SyntaxError>()(parseJson);
+ * const result = tryCatchSync(wrappedParseJson, '{"name": "John"}');
+ * if (result.success) {
+ *   console.log(result.data);
  * } else {
- *   console.error("Parse failed:", parseResult.error.message);
+ *   console.error(result.error.message);
  * }
  * ```
  */
@@ -63,14 +61,11 @@ export function tryCatchSync<
   T,
   E extends Error,
   Args extends readonly unknown[]
->(fn: (...args: Args) => T, ...args: Args): Result<T, E> {
+>(wrappedFn: SyncFnWithErr<T, E, Args>, ...args: Args): Result<T, E> {
   try {
-    const data = fn(...args);
-    return { success: true, data } as Result<T, never>;
+    const data = wrappedFn.fn(...args);
+    return { success: true, data };
   } catch (err) {
-    return {
-      success: false,
-      error: normalizeError<E>(err),
-    } as Result<never, E>;
+    return { success: false, error: normalizeError<E>(err) };
   }
 }

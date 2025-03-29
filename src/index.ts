@@ -12,26 +12,38 @@ export { AsyncFnWithErr } from "./core/AsyncFnWithErr";
 export { ErrorCode, CommonErrorCodes, CommonErrorCode } from "./core/ErrorCode";
 export { MapperFn, mapperFn } from "./utils/mapperFn";
 
+// Chainable Result API
+export { ChainableResult, Success, Failure } from "./utils/chainableResult";
+
 // Core functions
 export { asyncFn } from "./core/asyncFn";
-export { tryCatch, tryCatchSync } from "./core/tryCatch";
+export { tryCatchAsync, tryCatchSync } from "./core/tryCatch";
 export { mkErrClass } from "./core/mkErrClass";
 export { withCode } from "./core/withCode";
 export { compose, composeFns, composeMany } from "./core/compose";
 
 // Utility functions
 export {
+  // New names (preferred)
   mapResult,
-  mapResultSync,
+  mapSync,
   flatMapResult,
-  flatMapResultSync,
-  catchErr,
-  catchErrSync,
-  mapErr,
+  flatMapSync,
+  recoverWithResult,
+  recoverWithResultSync,
+  mapError,
+  transformBoth,
+  transformBothWithMappers,
   recover,
   filterResult,
   collectResults,
   CollectedErrors,
+  tap,
+  tapError,
+  getOrElse,
+  getValueOrDefault,
+  resultToPromise,
+  promiseToResult,
 } from "./utils/resultTransformers";
 
 export { retry, timeout, TimeoutError } from "./utils/asyncUtils";

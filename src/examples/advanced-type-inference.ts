@@ -1,16 +1,16 @@
 import {
-  tryCatch,
+  tryCatchAsync,
   mkErrClass,
   flatMapResult,
   compose,
   composeFns,
-  mapErr,
+  mapError,
   withCode,
   isErrorType,
   mapperFn,
   AsyncFnWithErr,
   asyncFn,
-} from "../src";
+} from "..";
 
 // Define complex error hierarchy
 interface NetworkErrorData extends Record<string, unknown> {
@@ -233,7 +233,7 @@ async function runAdvancedExample() {
 
     for (const id of ids) {
       console.log(`\nAttempting to fetch user ${id}:`);
-      const result = await tryCatch(getUserWithCode, id);
+      const result = await tryCatchAsync(getUserWithCode, id);
 
       if (result.success) {
         console.log("✅ Success:", result.data);
@@ -321,7 +321,7 @@ async function runAdvancedExample() {
 
     // Use our enhanced user service with the direct composition approach
     console.log("\nFetching user with enhanced service and posts:");
-    const enhancedResult = await tryCatch(
+    const enhancedResult = await tryCatchAsync(
       composeFns(
         enhancedGetUser,
         (user) =>
@@ -348,7 +348,7 @@ async function runAdvancedExample() {
 
     // Continue with regular composition for comparison
     console.log("\nFetching user with posts (standard approach):");
-    const userWithPostsResult = await tryCatch(
+    const userWithPostsResult = await tryCatchAsync(
       getUserWithPosts,
       "123",
       "token123"
@@ -379,7 +379,7 @@ async function runAdvancedExample() {
     console.log("\n3. Chaining operations with flatMapResult:");
 
     // Get user -> validate user -> get posts (each step can fail with different errors)
-    const user123Result = await tryCatch(
+    const user123Result = await tryCatchAsync(
       userService.getUser,
       "123",
       "token123"
@@ -388,12 +388,15 @@ async function runAdvancedExample() {
     const userToValidatedMapper = mapperFn<
       ValidationErrorInstance | NetworkErrorInstance | NotFoundErrorInstance
     >()(async (user: User) => {
-      const validationResult = await tryCatch(userService.validateUser, user);
+      const validationResult = await tryCatchAsync(
+        userService.validateUser,
+        user
+      );
       return flatMapResult(
         validationResult,
         mapperFn<NetworkErrorInstance | NotFoundErrorInstance>()(
           async (validUser: User) =>
-            tryCatch(postService.getPosts, validUser.id)
+            tryCatchAsync(postService.getPosts, validUser.id)
         )
       );
     });
@@ -443,12 +446,12 @@ async function runAdvancedExample() {
       originalType: string;
     }
 
-    const errorResult = await tryCatch(userService.getUser, "error");
+    const errorResult = await tryCatchAsync(userService.getUser, "error");
     const AppError = mkErrClass<AppErrorData>("AppError", "APP_ERROR", {
       originalType: "",
     });
 
-    const mappedResult = mapErr(errorResult, (originalError) => {
+    const mappedResult = mapError(errorResult, (originalError: Error) => {
       // Convert all errors to a standardized AppError
       return new AppError(`Application error: ${originalError.message}`, {
         data: {

@@ -1,12 +1,12 @@
 import {
   asyncFn,
-  tryCatch,
+  tryCatchAsync,
   mapResult,
   flatMapResult,
   mkErrClass,
   mapperFn,
   isErrorType,
-} from "../src";
+} from "..";
 
 // Custom error types
 interface ApiErrorData extends Record<string, unknown> {
@@ -57,7 +57,7 @@ const fetchUsers = asyncFn<ApiErrorInstance>()(async () => {
 // Try executing the API call
 async function run() {
   console.log("Fetching users...");
-  const result = await tryCatch(fetchUsers);
+  const result = await tryCatchAsync(fetchUsers);
 
   // 1. Create a mapper function that might throw ValidationError
   const validateUsers = mapperFn<ValidationErrorInstance>()(
@@ -87,7 +87,7 @@ async function run() {
     }
 
     // Return a new Result from this mapper
-    return tryCatch(
+    return tryCatchAsync(
       asyncFn<ValidationErrorInstance>()(async (): Promise<FormattedUser[]> => {
         return users.map((user) => ({
           displayName: user.name.toUpperCase(),

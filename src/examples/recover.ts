@@ -1,12 +1,12 @@
 import {
-  tryCatch,
+  tryCatchAsync,
   Result,
   asyncFn,
   recover,
   mkErrClass,
   isErrorType,
   CommonErrorCodes,
-} from "../src";
+} from "..";
 
 // Example domain entities
 interface User {
@@ -96,7 +96,7 @@ const cache = new Map<string, Post[]>();
 async function getUserProfile(userId: string) {
   console.log("\n--- Example 1: Simple Value Fallback ---");
 
-  const userResult = await tryCatch(fetchUser, userId);
+  const userResult = await tryCatchAsync(fetchUser, userId);
 
   // If user fetch fails, recover with a guest user
   const safeUser = recover.sync(userResult, {
@@ -114,7 +114,7 @@ async function getUserProfile(userId: string) {
 async function getUserWithErrorContext(userId: string) {
   console.log("\n--- Example 2: Function Fallback Using Error Context ---");
 
-  const userResult = await tryCatch(fetchUser, userId);
+  const userResult = await tryCatchAsync(fetchUser, userId);
 
   // Use error information to provide more context in the fallback
   const safeUser = recover.sync(userResult, (err) => {
@@ -150,7 +150,7 @@ async function getUserPostsWithCache(userId: string) {
   const cacheKey = `posts-${userId}`;
 
   // Try to fetch posts from API
-  const postsResult = await tryCatch(fetchUserPosts, userId);
+  const postsResult = await tryCatchAsync(fetchUserPosts, userId);
 
   // If API call fails, try to use cached data or generate empty posts
   const safePosts = await recover.async(postsResult, async (err) => {
@@ -189,7 +189,7 @@ async function completeUserWorkflow(userId: string) {
   console.log("\n--- Example 4: Chaining Recovers ---");
 
   // Get user profile with fallback
-  const userResult = await tryCatch(fetchUser, userId);
+  const userResult = await tryCatchAsync(fetchUser, userId);
   const safeUser = recover.sync(userResult, {
     id: "guest",
     name: "Guest User",
@@ -199,7 +199,7 @@ async function completeUserWorkflow(userId: string) {
   const user = safeUser.data;
 
   // Get user posts with fallback
-  const postsResult = await tryCatch(fetchUserPosts, user.id);
+  const postsResult = await tryCatchAsync(fetchUserPosts, user.id);
   const safePosts = await recover.async(postsResult, async () => {
     return [] as Post[];
   });
