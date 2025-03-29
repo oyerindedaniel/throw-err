@@ -26,11 +26,25 @@ export class Success<T> implements SuccessType<T> {
   constructor(public readonly data: T) {}
 
   /**
-   * Maps the success value to a new value
+   * Maps the success value to a new value synchronously
    */
-  map<U>(fn: (data: T) => U): ChainableResult<U, never> {
+  mapSync<U>(fn: (data: T) => U): ChainableResult<U, never> {
     try {
       return new Success(fn(this.data));
+    } catch (err) {
+      return new Failure(normalizeError(err));
+    }
+  }
+
+  /**
+   * Maps the success value to a new value asynchronously
+   */
+  async mapAsync<U>(
+    fn: (data: T) => Promise<U>
+  ): Promise<ChainableResult<U, never>> {
+    try {
+      const result = await fn(this.data);
+      return new Success(result);
     } catch (err) {
       return new Failure(normalizeError(err));
     }
@@ -67,13 +81,13 @@ export class Success<T> implements SuccessType<T> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _errorMapper?: (error: unknown) => F
   ): ChainableResult<U, F> {
-    return this.map(successMapper) as ChainableResult<U, F>;
+    return this.mapSync(successMapper) as ChainableResult<U, F>;
   }
 
   /**
-   * Chains with another Result-returning function
+   * Chains with another Result-returning function synchronously
    */
-  flatMap<U, F extends Error>(
+  flatMapSync<U, F extends Error>(
     fn: (data: T) => ChainableResult<U, F>
   ): ChainableResult<U, F> {
     try {
@@ -121,7 +135,7 @@ export class Success<T> implements SuccessType<T> {
   }
 
   /**
-   * Ignores recoverWithResult operations (renamed from catchErr)
+   * Ignores recoverWithResult operations
    */
   recoverWithResult<
     R = NoInfer<never>,
@@ -137,13 +151,6 @@ export class Success<T> implements SuccessType<T> {
     R = NoInfer<never>,
     F extends Error = never
   >(): ChainableResult<T, never> {
-    return this;
-  }
-
-  /**
-   * Ignores handleError operations (renamed from catchError)
-   */
-  handleError<R = NoInfer<never>>(): ChainableResult<T, never> {
     return this;
   }
 
@@ -234,6 +241,15 @@ export class Success<T> implements SuccessType<T> {
   toResult(): ResultType<T, never> {
     return { success: true, data: this.data };
   }
+
+  /**
+   * Alias for flatMapSync
+   */
+  flatMap<U, F extends Error>(
+    fn: (data: T) => ChainableResult<U, F>
+  ): ChainableResult<U, F> {
+    return this.flatMapSync(fn);
+  }
 }
 
 /**
@@ -245,18 +261,16 @@ export class Failure<E extends Error> implements FailureType<E> {
   constructor(public readonly error: ResultError<E>) {}
 
   /**
-   * Ignores map operations
+   * Ignores mapSync operations
    */
-  map<U = NoInfer<never>>(): ChainableResult<never, E> {
+  mapSync<U = NoInfer<never>>(): ChainableResult<never, E> {
     return this;
   }
 
   /**
-   * Ignores mapWithMapper operations
+   * Ignores mapAsync operations
    */
-  async mapWithMapper<U = NoInfer<never>, M extends Error = never>(): Promise<
-    ChainableResult<never, E>
-  > {
+  async mapAsync<U = NoInfer<never>>(): Promise<ChainableResult<never, E>> {
     return this;
   }
 
@@ -377,10 +391,30 @@ export class Failure<E extends Error> implements FailureType<E> {
   }
 
   /**
+   * Ignores flatMapSync operations
+   */
+  flatMapSync<U = NoInfer<never>, F extends Error = never>(): ChainableResult<
+    never,
+    E
+  > {
+    return this;
+  }
+
+  /**
    * Ignores flatMapAsync operations
    */
   async flatMapAsync<U = NoInfer<never>, F extends Error = never>(): Promise<
     ChainableResult<never, E>
+  > {
+    return this;
+  }
+
+  /**
+   * Alias for flatMapSync to maintain compatibility
+   */
+  flatMap<U = NoInfer<never>, F extends Error = never>(): ChainableResult<
+    never,
+    E
   > {
     return this;
   }
@@ -449,14 +483,30 @@ export const ChainableResult = {
   },
 
   /**
-   * Maps a Result using a simple function
+   * Maps a Result using a simple function synchronously
    */
-  map<T, U, E extends Error>(
+  mapSync<T, U, E extends Error>(
     result: ResultType<T, E>,
     fn: (data: T) => U
   ): ChainableResult<U, E> {
     const chainable = ChainableResult.fromResult(result);
-    return chainable.success ? chainable.map(fn) : (chainable as Failure<E>);
+    return chainable.success
+      ? (chainable as Success<T>).mapSync(fn)
+      : (chainable as Failure<E>);
+  },
+
+  /**
+   * Maps a Result using a simple function asynchronously
+   */
+  async mapAsync<T, U, E extends Error>(
+    result: ResultType<T, E>,
+    fn: (data: T) => Promise<U>
+  ): Promise<ChainableResult<U, E>> {
+    const chainable = ChainableResult.fromResult(result);
+    if (chainable.success) {
+      return await (chainable as Success<T>).mapAsync(fn);
+    }
+    return chainable as Failure<E>;
   },
 
   /**
@@ -469,7 +519,9 @@ export const ChainableResult = {
   ): ChainableResult<U, F> {
     const chainable = ChainableResult.fromResult(result);
     if (chainable.success) {
-      return chainable.map(successMapper) as ChainableResult<U, F>;
+      return (chainable as Success<T>).mapSync(
+        successMapper
+      ) as ChainableResult<U, F>;
     } else {
       return (chainable as Failure<E>).mapError(errorMapper);
     }
@@ -595,9 +647,9 @@ export const ChainableResult = {
   },
 
   /**
-   * Applies a function that returns a Result
+   * Applies a function that returns a Result synchronously
    */
-  flatMap<T, U, E extends Error, F extends Error>(
+  flatMapSync<T, U, E extends Error, F extends Error>(
     result: ResultType<T, E>,
     fn: (data: T) => ResultType<U, F>
   ): ChainableResult<U, E | F> {
@@ -612,6 +664,36 @@ export const ChainableResult = {
     } catch (err) {
       return new Failure(normalizeError(err));
     }
+  },
+
+  /**
+   * Applies a function that returns a Result asynchronously
+   */
+  async flatMapAsync<T, U, E extends Error, F extends Error>(
+    result: ResultType<T, E>,
+    fn: (data: T) => Promise<ResultType<U, F>>
+  ): Promise<ChainableResult<U, E | F>> {
+    const chainable = ChainableResult.fromResult(result);
+    if (!chainable.success) {
+      return chainable as unknown as ChainableResult<U, E>;
+    }
+
+    try {
+      const innerResult = await fn(chainable.data);
+      return ChainableResult.fromResult(innerResult);
+    } catch (err) {
+      return new Failure(normalizeError(err));
+    }
+  },
+
+  /**
+   * Applies a function that returns a Result
+   */
+  flatMap<T, U, E extends Error, F extends Error>(
+    result: ResultType<T, E>,
+    fn: (data: T) => ResultType<U, F>
+  ): ChainableResult<U, E | F> {
+    return ChainableResult.flatMapSync(result, fn);
   },
 
   /**
@@ -667,5 +749,80 @@ export const ChainableResult = {
     promise: Promise<T>
   ): Promise<ChainableResult<T, E>> {
     return ChainableResult.fromPromise(promise);
+  },
+
+  /**
+   * Applies a MapperFn that returns a Result
+   */
+  async flatMapWithMapper<
+    T,
+    U,
+    E extends Error,
+    F extends Error,
+    M extends Error
+  >(
+    result: ResultType<T, E>,
+    mapper: MapperFn<T, ResultType<U, F>, M>
+  ): Promise<ChainableResult<U, E | F | M>> {
+    const chainable = ChainableResult.fromResult(result);
+    if (!chainable.success) {
+      return chainable as unknown as ChainableResult<U, E>;
+    }
+
+    try {
+      const maybePromiseResult = mapper.fn(chainable.data);
+      const innerResult =
+        maybePromiseResult instanceof Promise
+          ? await maybePromiseResult
+          : maybePromiseResult;
+
+      return ChainableResult.fromResult(innerResult);
+    } catch (err) {
+      return new Failure(normalizeError<M>(err));
+    }
+  },
+
+  /**
+   * Transforms both success and error values using MapperFn objects
+   */
+  async transformBothWithMappers<
+    T,
+    U,
+    E extends Error,
+    F extends Error,
+    MS extends Error = never,
+    ME extends Error = never
+  >(
+    result: ResultType<T, E>,
+    successMapper: MapperFn<T, U, MS>,
+    errorMapper: MapperFn<E, F, ME>
+  ): Promise<ChainableResult<U, F | MS | ME>> {
+    const chainable = ChainableResult.fromResult(result);
+
+    if (chainable.success) {
+      try {
+        const mappedValue = await Promise.resolve(
+          successMapper.fn(chainable.data)
+        );
+        return new Success(mappedValue);
+      } catch (err) {
+        return new Failure(normalizeError<MS>(err));
+      }
+    } else {
+      try {
+        const rawError = chainable.error.raw;
+        const mappedError = await Promise.resolve(errorMapper.fn(rawError));
+        return new Failure({
+          raw: mappedError,
+          message: mappedError.message,
+          code:
+            "code" in mappedError
+              ? (mappedError.code as ErrorCode)
+              : CommonErrorCodes.UNKNOWN,
+        });
+      } catch (err) {
+        return new Failure(normalizeError<ME>(err));
+      }
+    }
   },
 };

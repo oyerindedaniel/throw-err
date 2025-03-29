@@ -1,11 +1,12 @@
 import { Result, ResultError } from "../types/Result";
 import {
   promiseToResult,
-  map,
+  mapSync,
   recover,
   tap,
   tapError,
   filterResult,
+  fromPromise,
 } from "../utils/resultTransformers";
 import { ChainableResult, Success, Failure } from "../utils/chainableResult";
 import { CommonErrorCodes } from "../core/ErrorCode";
@@ -131,6 +132,49 @@ class ExternalApiClient {
 // Initialize our API client
 const api = new ExternalApiClient();
 
+// Custom error conversion factory for API errors
+function convertApiError(
+  error: unknown
+):
+  | InstanceType<typeof ValidationError>
+  | InstanceType<typeof ApiError>
+  | InstanceType<typeof RateLimitError> {
+  if (error instanceof Error) {
+    // Check error message to determine what type of custom error to return
+    if (error.message.includes("not found")) {
+      const validationError = new ValidationError("Resource not found");
+      validationError.data = {
+        field: "id",
+        reason: "The requested ID does not exist",
+      };
+      return validationError;
+    } else if (error.message.includes("limit exceeded")) {
+      const rateLimitError = new RateLimitError("API rate limit exceeded");
+      rateLimitError.data = {
+        retryAfter: 60,
+      };
+      return rateLimitError;
+    } else if (error.message.includes("fail")) {
+      const apiError = new ApiError("API request failed");
+      apiError.data = {
+        statusCode: 500,
+        endpoint: "/users",
+      };
+      return apiError;
+    }
+  }
+
+  // Default case, return ApiError
+  const defaultError = new ApiError(
+    error instanceof Error ? error.message : String(error)
+  );
+  defaultError.data = {
+    statusCode: 500,
+    endpoint: "unknown",
+  };
+  return defaultError;
+}
+
 /**
  * Example 1: Simple Promise to Result conversion with non-chainable approach
  */
@@ -192,7 +236,7 @@ async function fetchAndProcessUserNonChainable(
   );
 
   // Map to add display name
-  const mappedResult = map(validatedResult, (user: User) => ({
+  const mappedResult = mapSync(validatedResult, (user: User) => ({
     ...user,
     displayName: `${user.name} <${user.email}>`,
   }));
@@ -253,7 +297,7 @@ async function fetchAndProcessUserChainable(id: string): Promise<ExtendedUser> {
         return error;
       }
     )
-    .map(
+    .mapSync(
       (user: User): ExtendedUser => ({
         ...user,
         displayName: `${user.name} <${user.email}>`,
@@ -323,15 +367,20 @@ async function updateUserProfileChainable(
   // First fetch the user
   const userResult = await ChainableResult.fromPromise(api.fetchUser(id));
 
-  // Then flat map to update (only if fetch succeeded)
-  return userResult.flatMapAsync(async (user: User) => {
-    return await ChainableResult.fromPromise(
-      api.updateUser(id, {
-        name,
-        email: user.email,
-      })
-    );
-  });
+  // If the result is successful, use flatMapAsync
+  if (userResult.success) {
+    const successResult = userResult as Success<User>;
+    return await successResult.flatMapAsync(async (user: User) => {
+      return await ChainableResult.fromPromise(
+        api.updateUser(id, {
+          name,
+          email: user.email,
+        })
+      );
+    });
+  }
+
+  return userResult;
 }
 
 /**
@@ -469,6 +518,35 @@ async function fetchWithRetryChainable(
   return ChainableResult.failure(lastError!);
 }
 
+/**
+ * Example 11: Using fromPromise with a typed error
+ */
+async function fetchUserWithTypedError(
+  id: string
+): Promise<
+  Result<
+    User,
+    | InstanceType<typeof ValidationError>
+    | InstanceType<typeof ApiError>
+    | InstanceType<typeof RateLimitError>
+  >
+> {
+  console.log("Fetching user with typed error handling...");
+
+  // Use fromPromise with explicit error typing
+  return fromPromise<
+    User,
+    | InstanceType<typeof ValidationError>
+    | InstanceType<typeof ApiError>
+    | InstanceType<typeof RateLimitError>
+  >(
+    // The raw promise
+    api.fetchUser(id),
+    // Custom error factory that converts errors to our domain-specific errors
+    convertApiError
+  );
+}
+
 // Run the examples
 async function runExamples() {
   // Example 1
@@ -509,6 +587,26 @@ async function runExamples() {
   // Example 10
   const user10 = await fetchWithRetryChainable("222");
   console.log("Result from Example 10:", user10.toResult());
+
+  // Example 11
+  const user11 = await fetchUserWithTypedError("123");
+  console.log("Result from Example 11:", user11);
+  if (!user11.success) {
+    // We now have proper type narrowing for our custom error types
+    if (user11.error.raw instanceof ValidationError) {
+      console.log(
+        `Validation error: ${user11.error.raw.data.reason} for field ${user11.error.raw.data.field}`
+      );
+    } else if (user11.error.raw instanceof RateLimitError) {
+      console.log(
+        `Rate limit error: retry after ${user11.error.raw.data.retryAfter} seconds`
+      );
+    } else if (user11.error.raw instanceof ApiError) {
+      console.log(
+        `API error: ${user11.error.raw.data.statusCode} at ${user11.error.raw.data.endpoint}`
+      );
+    }
+  }
 }
 
 // Don't automatically run in module context
@@ -527,5 +625,6 @@ export {
   fetchMultipleUsersChainable,
   fetchWithRetryNonChainable,
   fetchWithRetryChainable,
+  fetchUserWithTypedError,
   runExamples,
 };

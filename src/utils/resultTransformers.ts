@@ -4,11 +4,11 @@ import {
   SuccessResult,
   ResultError,
 } from "../types/Result";
-import { CommonErrorCodes, ErrorCode } from "../core/ErrorCode";
+import { CommonErrorCodes } from "../core/ErrorCode";
 import { MapperFn } from "./mapperFn";
 import { tryCatchAsync } from "../core/tryCatch";
 import { asyncFn } from "../core/asyncFn";
-import { normalizeError } from "../utils/normalizeError";
+import { getErrorCode, normalizeError } from "../utils/normalizeError";
 
 /**
  * Simple map function that transforms the success value of a Result
@@ -145,7 +145,7 @@ export async function mapResult<T, U, E extends Error, M extends Error = E>(
  * const appResult = mapError(
  *   result,
  *   err => {
- *     if (err instanceof NetworkError) {
+ *     if (isErrorType(err, NetworkError)) {
  *       return new AppError(`Connection issue: ${err.message}`);
  *     }
  *     return new AppError(`Unknown error: ${err.message}`);
@@ -163,10 +163,7 @@ export function mapError<T, E extends Error, F extends Error>(
     return Result.failure({
       raw: transformedError,
       message: transformedError.message,
-      code:
-        "code" in transformedError
-          ? (transformedError.code as ErrorCode)
-          : CommonErrorCodes.UNKNOWN,
+      code: getErrorCode(transformedError),
     });
   }
   return Result.success(result.data);
@@ -477,10 +474,7 @@ export function transformBoth<T, U, E extends Error, F extends Error>(
     return Result.failure({
       raw: transformedError,
       message: transformedError.message,
-      code:
-        "code" in transformedError
-          ? (transformedError.code as ErrorCode)
-          : CommonErrorCodes.UNKNOWN,
+      code: getErrorCode(transformedError),
     });
   }
 }
@@ -570,10 +564,7 @@ export async function transformBothWithMappers<
       return Result.failure({
         raw: transformedError,
         message: transformedError.message,
-        code:
-          "code" in transformedError
-            ? (transformedError.code as ErrorCode)
-            : CommonErrorCodes.UNKNOWN,
+        code: getErrorCode(transformedError),
       });
     } else {
       return Result.failure(mappingResult.error);
@@ -695,7 +686,7 @@ export function filterResult<T, E extends Error>(
     return Result.failure({
       raw: error,
       message: error.message,
-      code: CommonErrorCodes.UNKNOWN,
+      code: getErrorCode(error),
     });
   }
   return result;
@@ -871,30 +862,53 @@ export function toPromise<T, E extends Error>(
 /**
  * Converts a Promise to a Result
  * @template T The success type
+ * @template E The error type
  * @param promise The promise to convert
+ * @param errorFactory Optional function to convert unknown errors to specific error types
  * @returns A Promise that resolves to a Result
  *
  * @remarks
- * This is useful when working with external Promise-based APIs
- * and you want to integrate them into your Result-based error handling.
- * The error type will be the type of whatever the Promise rejects with.
+ * This function can take an optional error factory function that converts any thrown errors
+ * to a specific error type E. This is useful when working with external APIs where you want
+ * to normalize errors to your domain-specific error types.
+ *
+ * When using with external APIs, you can provide a custom error factory that checks
+ * the error message or properties and returns an appropriate typed error for your domain.
  *
  * @example
  * ```typescript
- * // Working with a third-party API that returns Promises
- * const userPromise = externalApi.getUser('123');
- *
- * // Convert to a Result for consistent error handling
- * const userResult = await fromPromise(userPromise);
- *
- * // Now you can use all your Result utilities
- * const safeUser = recover.sync(userResult, { name: 'Guest' });
+ * // Convert any error to a custom ApplicationError
+ * const result = await fromPromise(
+ *   externalApi.fetchData(),
+ *   (err) => {
+ *     if (err instanceof Error && err.message.includes("network")) {
+ *       return new NetworkError("Network failure", { retryable: true });
+ *     }
+ *     return new ApplicationError(`External API error: ${String(err)}`);
+ *   }
+ * );
  * ```
  */
 export async function fromPromise<T, E extends Error = Error>(
-  promise: Promise<T>
+  promise: Promise<T>,
+  errorFactory?: (error: unknown) => E
 ): Promise<Result<T, E>> {
-  return tryCatchAsync(asyncFn<E>()(async () => promise));
+  try {
+    const data = await promise;
+    return Result.success(data);
+  } catch (err) {
+    if (errorFactory) {
+      // Use the custom error factory to convert the error
+      const typedError = errorFactory(err);
+      return Result.failure({
+        raw: typedError,
+        message: typedError.message,
+        code: getErrorCode(typedError),
+      });
+    }
+    // Default error handling
+    return Result.failure(normalizeError<E>(err));
+  }
 }
 
 /**
@@ -1183,4 +1197,73 @@ export function recoverWithResultSync<
     }
   }
   return Result.success(result.data); // T
+}
+
+/**
+ * Synchronously applies a MapperFn that returns a Result
+ * @template T The original success type
+ * @template U The success type of the inner Result
+ * @template E The original error type
+ * @template F The error type of the inner Result
+ * @template M The mapper's thrown error type
+ * @param result The original Result
+ * @param mapper A MapperFn that returns a Result
+ * @returns A new Result combining all possible error types
+ *
+ * @remarks
+ * This is the synchronous version of flatMapResult. Use this when
+ * the mapper function doesn't need to perform async operations.
+ *
+ * @example
+ * ```typescript
+ * const userResult = tryCatchSync(parseUserSync, userJson);
+ *
+ * // Create a mapper that returns a Result
+ * const validateUser = mapperFn<ValidationError>()((user) => {
+ *   if (!user.email) {
+ *     return Result.failure({
+ *       raw: new ValidationError("Email required"),
+ *       message: "Email is required",
+ *       code: "VALIDATION_ERROR"
+ *     });
+ *   }
+ *   return Result.success(user);
+ * });
+ *
+ * // Map with proper error typing
+ * const validatedResult = flatMapWithMapperSync(userResult, validateUser);
+ * ```
+ */
+export function flatMapWithMapperSync<
+  T,
+  U,
+  E extends Error,
+  F extends Error,
+  M extends Error = E
+>(
+  result: Result<T, E>,
+  mapper: MapperFn<T, Result<U, F>, M>
+): Result<U, E | F | M> {
+  if (!result.success) {
+    return Result.failure(result.error); // Error type E
+  }
+
+  try {
+    const innerResult = mapper.fn(result.data);
+
+    // Ensure innerResult is not a Promise
+    if (innerResult instanceof Promise) {
+      throw new Error(
+        "Expected synchronous Result, but got Promise<Result>. Use flatMapResult for async operations."
+      );
+    }
+
+    if (innerResult.success) {
+      return Result.success(innerResult.data);
+    } else {
+      return Result.failure(innerResult.error);
+    }
+  } catch (err) {
+    return Result.failure(normalizeError<M>(err));
+  }
 }

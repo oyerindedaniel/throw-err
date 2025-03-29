@@ -67,6 +67,25 @@ export const Result = {
   },
 
   /**
+   * Unwrap a result's error, returning the error or throwing if it's a success
+   * @throws {Error} If the result is a success
+   */
+  unwrapErr<T, E extends Error>(result: Result<T, E>): ResultError<E> {
+    if (!result.success) {
+      return result.error;
+    }
+    throw new Error("Cannot unwrap error from a success result");
+  },
+
+  /**
+   * Safely unwrap a result, returning either the data or undefined if it's an error
+   * Unlike unwrap, this never throws
+   */
+  safeUnwrap<T, E extends Error>(result: Result<T, E>): T | undefined {
+    return result.success ? result.data : undefined;
+  },
+
+  /**
    * Map a success result to a new value
    */
   map<T, U, E extends Error>(

@@ -64,8 +64,11 @@ export function tryCatchSync<
 >(wrappedFn: SyncFnWithErr<T, E, Args>, ...args: Args): Result<T, E> {
   try {
     const data = wrappedFn.fn(...args);
-    return { success: true, data };
+    return { success: true, data } as Result<T, never>;
   } catch (err) {
-    return { success: false, error: normalizeError<E>(err) };
+    return { success: false, error: normalizeError<E>(err) } as Result<
+      never,
+      E
+    >;
   }
 }

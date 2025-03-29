@@ -72,9 +72,10 @@ export function isResultError(obj: unknown): boolean {
  */
 export function getErrorCode(error: Error): ErrorCode {
   if ("code" in error && typeof error.code === "string") {
-    return error.code;
+    return error.code as ErrorCode;
   }
 
+  // Strictly typed custom error name
   if (
     "name" in error &&
     typeof error.name === "string" &&
