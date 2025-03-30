@@ -6,19 +6,37 @@ import { mkErrClass } from "../core/mkErrClass";
 import { ResultError, Result } from "../types/Result";
 import { mapperFn } from "../utils/mapperFn";
 
+// Define a custom error type
+type NetworkErrorData = {
+  retryable: boolean;
+  statusCode: number;
+};
+
+type ProcessingErrorData = {
+  step: string;
+};
+
 // Custom error types using mkErrClass
 const ParseError = mkErrClass("ParseError", CommonErrorCodes.VALIDATION);
 const ValidationError = mkErrClass(
   "ValidationError",
   CommonErrorCodes.VALIDATION
 );
-const NetworkError = mkErrClass("NetworkError", CommonErrorCodes.NETWORK, {
-  retryable: false,
-  statusCode: 0,
-});
-const ProcessingError = mkErrClass("ProcessingError", "PROCESSING_ERROR", {
-  step: "",
-});
+const NetworkError = mkErrClass<NetworkErrorData, "NetworkError">(
+  "NetworkError",
+  CommonErrorCodes.NETWORK,
+  {
+    retryable: false,
+    statusCode: 0,
+  }
+);
+const ProcessingError = mkErrClass<ProcessingErrorData, "ProcessingError">(
+  "ProcessingError",
+  "PROCESSING_ERROR",
+  {
+    step: "",
+  }
+);
 
 // Example 1: Basic method chaining with parsing and validation
 function parseAndValidateNumber(input: string): number {
@@ -32,15 +50,15 @@ function parseAndValidateNumber(input: string): number {
     }
   );
 
-  // Using the new trySync method for a cleaner chain
+  // Using the new tryCatch method for a cleaner chain
   return (
-    ChainableResult.trySync(parseNumber, input)
+    ChainableResult.tryCatch(parseNumber, input)
       // Transform the value if successful
-      .mapSync((num: number) => num * 2)
+      .map((num) => num * 2)
       // Add validation
       .filter(
-        (num: number) => num > 0,
-        (num: number) => new ValidationError(`Value ${num} must be positive`)
+        (num) => num > 0,
+        (num) => new ValidationError(`Value ${num} must be positive`)
       )
       // Map errors to a different type if needed
       .mapErr((error) => {
@@ -59,7 +77,7 @@ function processUserInput(input: string) {
   return (
     ChainableResult.success(input)
       // Apply transformations
-      .mapSync((str: string) => str.trim())
+      .map((str: string) => str.trim())
       .filter(
         (str: string) => str.length > 0,
         () => new ValidationError("Input cannot be empty")
@@ -84,13 +102,13 @@ async function fetchAndProcessData() {
     return Promise.resolve({ id: "123", name: "Example Data" });
   });
 
-  // Using the new try method for async operations
-  const result = await ChainableResult.tryAsync(fetchData);
+  // Using the tryCatchAsync method for async operations
+  const result = await ChainableResult.tryCatchAsync(fetchData);
 
   // Now we can use the chainable methods on the result
   return (
     result
-      .mapSync((data: { id: string; name: string }) => {
+      .map((data: { id: string; name: string }) => {
         // Process the data
         return {
           ...data,

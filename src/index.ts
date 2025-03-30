@@ -10,14 +10,19 @@ export const version = "0.1.0";
 export { Result, ResultError } from "./types/Result";
 export { AsyncFnWithErr } from "./core/AsyncFnWithErr";
 export { ErrorCode, CommonErrorCodes, CommonErrorCode } from "./core/ErrorCode";
-export { MapperFn, mapperFn } from "./utils/mapperFn";
+export {
+  MapperFn,
+  mapperFn,
+  MapperFnAsync,
+  mapperFnAsync,
+} from "./utils/mapperFn";
 
 // Chainable Result API
 export { ChainableResult, Success, Failure } from "./utils/chainableResult";
 
 // Core functions
 export { asyncFn } from "./core/asyncFn";
-export { tryCatchAsync, tryCatchSync } from "./core/tryCatch";
+export { tryCatchAsync, tryCatch } from "./core/tryCatch";
 export { mkErrClass } from "./core/mkErrClass";
 export { withCode } from "./core/withCode";
 export { compose, composeFns, composeMany } from "./core/compose";
@@ -25,12 +30,16 @@ export { compose, composeFns, composeMany } from "./core/compose";
 // Utility functions
 export {
   // New names (preferred)
-  mapResult,
-  mapSync,
-  flatMapResult,
-  flatMapSync,
+  map,
+  mapAsync,
+  mapWithMapper,
+  mapWithMapperAsync,
+  flatMapWithMapperAsync,
+  flatMapWithMapper,
+  flatMap,
+  flatMapAsync,
+  recoverWithResultAsync,
   recoverWithResult,
-  recoverWithResultSync,
   mapError,
   transformBoth,
   transformBothWithMappers,
@@ -56,7 +65,6 @@ export {
   hasErrorName,
   hasProperty,
   createErrorTypeGuard,
-  createConstrainedErrorGuard,
 } from "./utils/errorTypeUtils";
 
 // Error normalization utilities

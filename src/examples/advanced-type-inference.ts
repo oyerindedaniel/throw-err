@@ -1,7 +1,6 @@
 import {
   tryCatchAsync,
   mkErrClass,
-  flatMapResult,
   compose,
   composeFns,
   mapError,
@@ -10,6 +9,8 @@ import {
   mapperFn,
   AsyncFnWithErr,
   asyncFn,
+  mapperFnAsync,
+  flatMapWithMapperAsync,
 } from "..";
 
 // Define complex error hierarchy
@@ -31,20 +32,24 @@ interface AuthErrorData extends Record<string, unknown> {
 }
 
 // Create custom error classes with specific data
-const NetworkError = mkErrClass<NetworkErrorData>(
+const NetworkError = mkErrClass<NetworkErrorData, "NetworkError">(
   "NetworkError",
   "NETWORK_ERROR",
   { url: "", retryable: false }
 );
-const ValidationError = mkErrClass<ValidationErrorData>(
+const ValidationError = mkErrClass<ValidationErrorData, "ValidationError">(
   "ValidationError",
   "VALIDATION_ERROR",
   { field: "", value: null, constraints: [] }
 );
-const AuthError = mkErrClass<AuthErrorData>("AuthError", "AUTH_ERROR", {
-  user: undefined,
-  requiredRole: undefined,
-});
+const AuthError = mkErrClass<AuthErrorData, "AuthError">(
+  "AuthError",
+  "AUTH_ERROR",
+  {
+    user: undefined,
+    requiredRole: undefined,
+  }
+);
 const NotFoundError = mkErrClass("NotFoundError", "NOT_FOUND");
 
 // Define types for instances
@@ -248,7 +253,7 @@ async function runAdvancedExample() {
           console.log("   Retryable:", result.error.raw.data.retryable);
         } else if (isErrorType(result.error.raw, AuthError)) {
           console.log("   Type: Auth Error");
-          console.log("   Required Role:", result.error.raw.data.requiredRole);
+          console.log("   Required Role:", result.error.raw.data.user);
         }
       }
     }
@@ -375,8 +380,8 @@ async function runAdvancedExample() {
       }
     }
 
-    // 3. Chaining operations with flatMapResult:
-    console.log("\n3. Chaining operations with flatMapResult:");
+    // 3. Chaining operations with flatMapWithMapperAsync:
+    console.log("\n3. Chaining operations with flatMapWithMapperAsync:");
 
     // Get user -> validate user -> get posts (each step can fail with different errors)
     const user123Result = await tryCatchAsync(
@@ -385,14 +390,14 @@ async function runAdvancedExample() {
       "token123"
     );
 
-    const userToValidatedMapper = mapperFn<
+    const userToValidatedMapper = mapperFnAsync<
       ValidationErrorInstance | NetworkErrorInstance | NotFoundErrorInstance
     >()(async (user: User) => {
       const validationResult = await tryCatchAsync(
         userService.validateUser,
         user
       );
-      return flatMapResult(
+      return flatMapWithMapperAsync(
         validationResult,
         mapperFn<NetworkErrorInstance | NotFoundErrorInstance>()(
           async (validUser: User) =>
@@ -401,7 +406,7 @@ async function runAdvancedExample() {
       );
     });
 
-    const validatedWithPostsResult = await flatMapResult(
+    const validatedWithPostsResult = await flatMapWithMapperAsync(
       user123Result,
       userToValidatedMapper
     );
@@ -447,9 +452,13 @@ async function runAdvancedExample() {
     }
 
     const errorResult = await tryCatchAsync(userService.getUser, "error");
-    const AppError = mkErrClass<AppErrorData>("AppError", "APP_ERROR", {
-      originalType: "",
-    });
+    const AppError = mkErrClass<AppErrorData, "AppError">(
+      "AppError",
+      "APP_ERROR",
+      {
+        originalType: "",
+      }
+    );
 
     const mappedResult = mapError(errorResult, (originalError: Error) => {
       // Convert all errors to a standardized AppError

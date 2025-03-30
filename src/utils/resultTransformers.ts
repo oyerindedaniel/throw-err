@@ -5,10 +5,11 @@ import {
   ResultError,
 } from "../types/Result";
 import { CommonErrorCodes } from "../core/ErrorCode";
-import { MapperFn } from "./mapperFn";
-import { tryCatchAsync } from "../core/tryCatch";
+import { MapperFn, MapperFnAsync } from "./mapperFn";
+import { tryCatch, tryCatchAsync } from "../core/tryCatch";
 import { asyncFn } from "../core/asyncFn";
 import { getErrorCode, normalizeError } from "../utils/normalizeError";
+import { syncFn } from "../core/syncFn";
 
 /**
  * Simple map function that transforms the success value of a Result
@@ -55,6 +56,104 @@ export function map<T, U, E extends Error>(
 }
 
 /**
+ * Asynchronous map function that transforms the success value of a Result.
+ *
+ * @template T The original success type
+ * @template U The transformed success type
+ * @template E The original error type
+ * @template M The additional error type that may arise from the async mapper function
+ *
+ * @param result The result to transform
+ * @param mapper An async function that maps T to U
+ * @returns A Promise resolving to a new Result with either the transformed value or the original/normalized error
+ *
+ * @remarks
+ * - Use this function when:
+ *   - You need to transform a success value asynchronously.
+ *   - The mapping function has a **low chance** of introducing a new error.
+ *   - You want to ensure the error type remains unchanged.
+ * - If the async mapper function could introduce a **new type of error**, consider using `mapWithMapperAsync` instead.
+ *
+ * Unlike `map`, this function supports asynchronous transformations. If the `mapper` function rejects or throws,
+ * the error is normalized and returned as a `Result.failure`.
+ *
+ * @example
+ * ```typescript
+ * const userResult = await tryCatchAsync(fetchUser, '123'); // Result<User, FetchError>
+ *
+ * // Transform the user data asynchronously to fetch additional details
+ * const detailedUserResult = await mapAsync(
+ *   userResult,
+ *   async user => await fetchUserDetails(user.id)
+ * );
+ * ```
+ */
+export async function mapAsync<T, U, E extends Error>(
+  result: Result<T, E>,
+  mapper: (data: T) => Promise<U>
+): Promise<Result<U, E>> {
+  if (!result.success) {
+    return Result.failure(result.error); // Error type E
+  }
+
+  try {
+    const data = await mapper(result.data);
+    return Result.success(data);
+  } catch (err) {
+    return Result.failure(normalizeError(err));
+  }
+}
+
+/**
+ * Transforms the success value of a `Result` while handling potential errors from the transformation.
+ *
+ * @template T The original success type.
+ * @template U The transformed success type.
+ * @template E The original error type.
+ * @template M The mapper error type.
+ *
+ * @param result The `Result` to transform.
+ * @param mapper A `MapperFn` instance that maps `T` to `U`, which may throw an error of type `M`.
+ * @returns A new `Result` with either the transformed value or one of the possible error types (`E | M`).
+ *
+ * @remarks
+ * - Use this function when:
+ *   - You need to transform success values synchronously while handling potential errors.
+ *   - The transformation **might throw specific errors** that should be properly captured.
+ *   - You want strong type safety by using a `MapperFn` for structured error handling.
+ * - For **asynchronous transformations**, use `mapWithMapperAsync` instead.
+ *
+ * @example
+ * ```typescript
+ * const numberResult: Result<string, Error> = Result.success("42");
+ *
+ * const parseNumber = MapperFn<string, number, SyntaxError>()((text) => {
+ *   const num = Number(text);
+ *   if (isNaN(num)) throw new SyntaxError("Invalid number");
+ *   return num;
+ * });
+ *
+ * const transformedResult = mapWithMapper(numberResult, parseNumber);
+ * ```
+ */
+export function mapWithMapper<T, U, E extends Error, M extends Error = E>(
+  result: Result<T, E>,
+  mapper: MapperFn<T, U, M>
+): Result<U, E | M> {
+  if (!result.success) {
+    return Result.failure(result.error); // Error type E
+  }
+
+  const mappingResult = tryCatch(syncFn<M>()(() => mapper.fn(result.data)));
+
+  if (mappingResult.success) {
+    return Result.success(mappingResult.data); // U
+  } else {
+    return Result.failure(mappingResult.error); // M
+  }
+}
+
+/**
  * Transforms the success value of a Result with typed error handling
  * If the mapper throws, the error is properly typed and included in the result
  * @template T The original success type
@@ -62,24 +161,24 @@ export function map<T, U, E extends Error>(
  * @template E The original error type
  * @template M The mapper error type
  * @param result The result to transform
- * @param mapper A MapperFn instance that maps T to U (can throw errors of type M)
+ * @param mapper A MapperFnAsync instance that maps T to U (can throw errors of type M)
  * @returns A new Result with either the transformed value or either of the error types
  *
  * @remarks
  * Use this function when:
  * - You need to transform success values with proper error handling
  * - Your transformation might throw specific errors you want to catch
- * - You want to leverage the type-safety of MapperFn
+ * - You want to leverage the type-safety of MapperFnAsync
  *
- * This provides more robust error handling than map or mapSync because it
- * works with MapperFn to properly type potential errors from the transformation.
+ * This provides more robust error handling than map or mapAsync because it
+ * works with MapperFnAsync to properly type potential errors from the transformation.
  *
  * @example
  * ```typescript
  * const userResult = await tryCatchAsync(fetchUser, "123");
  *
  * // Create a mapper with ParseError as the error type
- * const parseJson = mapperFn<ParseError>()((text: string) => {
+ * const parseJson = MapperFnAsync<ParseError>()((text: string) => {
  *   try {
  *     return JSON.parse(text);
  *   } catch (err) {
@@ -100,9 +199,14 @@ export function map<T, U, E extends Error>(
  * }
  * ```
  */
-export async function mapResult<T, U, E extends Error, M extends Error = E>(
+export async function mapWithMapperAsync<
+  T,
+  U,
+  E extends Error,
+  M extends Error = E
+>(
   result: Result<T, E>,
-  mapper: MapperFn<T, U, M>
+  mapper: MapperFnAsync<T, U, M>
 ): Promise<Result<U, E | M>> {
   if (!result.success) {
     return Result.failure(result.error); // Error type E
@@ -170,6 +274,69 @@ export function mapError<T, E extends Error, F extends Error>(
 }
 
 /**
+ * Synchronously applies a MapperFnAsync that returns a Result
+ * @template T The original success type
+ * @template U The success type of the inner Result
+ * @template E The original error type
+ * @template F The error type of the inner Result
+ * @template M The mapper's thrown error type
+ * @param result The original Result
+ * @param mapper A MapperFnAsync that returns a Result
+ * @returns A new Result combining all possible error types
+ *
+ * @remarks
+ * This is the synchronous version of flatMapWithMapperAsync. Use this when
+ * the mapper function doesn't need to perform async operations.
+ *
+ * @example
+ * ```typescript
+ * const userResult = tryCatchSync(parseUserSync, userJson);
+ *
+ * // Create a mapper that returns a Result
+ * const validateUser = MapperFnAsync<ValidationError>()((user) => {
+ *   if (!user.email) {
+ *     return Result.failure({
+ *       raw: new ValidationError("Email required"),
+ *       message: "Email is required",
+ *       code: "VALIDATION_ERROR"
+ *     });
+ *   }
+ *   return Result.success(user);
+ * });
+ *
+ * // Map with proper error typing
+ * const validatedResult = flatMapWithMapper(userResult, validateUser);
+ * ```
+ */
+export function flatMapWithMapper<
+  T,
+  U,
+  E extends Error,
+  F extends Error,
+  M extends Error = E
+>(
+  result: Result<T, E>,
+  mapper: MapperFn<T, Result<U, F>, M>
+): Result<U, E | F | M> {
+  if (!result.success) {
+    return Result.failure(result.error); // Error type E
+  }
+
+  const mappingResult = tryCatch(syncFn<M>()(() => mapper.fn(result.data)));
+
+  if (mappingResult.success) {
+    const innerResult = mappingResult.data; // Type: Result<U, F>
+    if (innerResult.success) {
+      return Result.success(innerResult.data); // U
+    } else {
+      return Result.failure(innerResult.error); // F
+    }
+  } else {
+    return Result.failure(mappingResult.error); // M
+  }
+}
+
+/**
  * Chains operations where the mapper returns a Result
  * @template T The original success type
  * @template U The transformed success type
@@ -177,7 +344,7 @@ export function mapError<T, E extends Error, F extends Error>(
  * @template F The mapper's result error type (inferred from inner Result)
  * @template M The mapper function's possible error type
  * @param result The original result
- * @param mapper A MapperFn that maps T to Result<U, F> (can itself throw errors of type M)
+ * @param mapper A MapperFnAsync that maps T to Result<U, F> (can itself throw errors of type M)
  * @returns A result that combines all possible error types
  *
  * @remarks
@@ -194,13 +361,13 @@ export function mapError<T, E extends Error, F extends Error>(
  * const userResult = await tryCatchAsync(fetchUser, "123"); // Result<User, FetchError>
  *
  * // Create a mapper with DatabaseError as the error type
- * const fetchPosts = mapperFn<DatabaseError>()((user) => {
+ * const fetchPosts = MapperFnAsync<DatabaseError>()((user) => {
  *   if (!user.id) throw new DatabaseError("Cannot process user without ID");
  *   return tryCatchAsync(fetchUserPosts, user.id); // Result<Post[], NotFoundError>
  * });
  *
  * // Type safety is maintained, F is inferred as NotFoundError
- * const postsResult = await flatMapResult(userResult, fetchPosts);
+ * const postsResult = await flatMapWithMapperAsync(userResult, fetchPosts);
  * // Result<Post[], FetchError | NotFoundError | DatabaseError>
  *
  * if (!postsResult.success) {
@@ -214,7 +381,7 @@ export function mapError<T, E extends Error, F extends Error>(
  * }
  * ```
  */
-export async function flatMapResult<
+export async function flatMapWithMapperAsync<
   T,
   U,
   E extends Error,
@@ -222,7 +389,7 @@ export async function flatMapResult<
   M extends Error = E
 >(
   result: Result<T, E>,
-  mapper: MapperFn<T, Result<U, F>, M>
+  mapper: MapperFnAsync<T, Result<U, F>, M>
 ): Promise<Result<U, E | F | M>> {
   if (!result.success) {
     return Result.failure(result.error); // Error type E
@@ -245,6 +412,74 @@ export async function flatMapResult<
 }
 
 /**
+ * Recovers from errors by transforming them or providing fallback data (synchronous version)
+ * @template T The original success type
+ * @template R The recovery success type
+ * @template E The original error type
+ * @template F The handler's result error type
+ * @template M The handler's thrown error type
+ * @param result The original result
+ * @param handler A function that maps ResultError<E> to Result<R, F> and may throw M
+ * @returns A new Result with combined success and error types
+ *
+ * @remarks
+ * Use this function when:
+ * - You need sophisticated error recovery without async operations
+ * - Your recovery logic might produce new errors
+ * - You want to maintain type safety throughout
+ *
+ * This is the synchronous version of recoverWithResult for cases where
+ * you don't need async operations in your recovery logic.
+ *
+ * @example
+ * ```typescript
+ * const userResult = await tryCatchAsync(fetchUser, '123');
+ *
+ * // Synchronously recover from certain errors
+ * const safeResult = recoverWithResultSync(
+ *   userResult,
+ *   error => {
+ *     if (error.raw instanceof NotFoundError) {
+ *       return Result.success({ id: '123', name: 'Guest User' });
+ *     }
+ *     // Rethrow other errors as app errors
+ *     return Result.failure({
+ *       raw: new AppError(`User fetch failed: ${error.message}`),
+ *       message: `User fetch failed: ${error.message}`,
+ *       code: CommonErrorCodes.UNKNOWN
+ *     });
+ *   }
+ * );
+ * ```
+ */
+export function recoverWithResult<
+  T,
+  R,
+  E extends Error,
+  F extends Error,
+  M extends Error = F
+>(
+  result: Result<T, E>,
+  handler: MapperFn<ExtractResultError<Result<T, E>>, Result<R, F>, M>
+): Result<T | R, F | M> {
+  if (!result.success) {
+    const handlerResult = tryCatch(syncFn<M>()(() => handler.fn(result.error)));
+
+    if (handlerResult.success) {
+      const innerResult = handlerResult.data; // Result<R, F>
+      if (innerResult.success) {
+        return Result.success(innerResult.data); // R
+      } else {
+        return Result.failure(innerResult.error); // F
+      }
+    } else {
+      return Result.failure(handlerResult.error); // M
+    }
+  }
+  return Result.success(result.data); // T
+}
+
+/**
  * Recovers from errors by transforming them or providing fallback data
  * @template T The original success type
  * @template R The recovery success type
@@ -252,7 +487,7 @@ export async function flatMapResult<
  * @template F The handler's result error type
  * @template M The handler's thrown error type
  * @param result The original result
- * @param handler A MapperFn that maps E to Result<R, F> and may throw M
+ * @param handler A MapperFnAsync that maps E to Result<R, F> and may throw M
  * @returns A new Result with combined success and error types
  *
  * @remarks
@@ -269,7 +504,7 @@ export async function flatMapResult<
  * const userResult = await tryCatchAsync(fetchUser, '123');
  *
  * // Try fetching from cache if network fails
- * const cachedFetch = mapperFn<CacheError>()((error) => {
+ * const cachedFetch = MapperFnAsync<CacheError>()((error) => {
  *   if (error.raw instanceof NetworkError) {
  *     return fetchFromCache('user-123'); // Returns Result<User, CacheError>
  *   }
@@ -280,7 +515,7 @@ export async function flatMapResult<
  * // Type: Result<User, NetworkError | CacheError | AppError>
  * ```
  */
-export async function recoverWithResult<
+export async function recoverWithResultAsync<
   T,
   R,
   E extends Error,
@@ -288,7 +523,7 @@ export async function recoverWithResult<
   M extends Error = F
 >(
   result: Result<T, E>,
-  handler: MapperFn<ExtractResultError<Result<T, E>>, Result<R, F>, M>
+  handler: MapperFnAsync<ExtractResultError<Result<T, E>>, Result<R, F>, M>
 ): Promise<Result<T | R, E | F | M>> {
   if (!result.success) {
     const handlerResult = await tryCatchAsync(
@@ -488,8 +723,8 @@ export function transformBoth<T, U, E extends Error, F extends Error>(
  * @template MS The success mapper error type
  * @template ME The error mapper error type
  * @param result The result to transform
- * @param successMapper A MapperFn instance that maps T to U (can throw errors of type MS)
- * @param errorMapper A MapperFn instance that maps E to F (can throw errors of type ME)
+ * @param successMapper A MapperFnAsync instance that maps T to U (can throw errors of type MS)
+ * @param errorMapper A MapperFnAsync instance that maps E to F (can throw errors of type ME)
  * @returns A new Result with transformed values or error from the mapping process
  *
  * @remarks
@@ -505,14 +740,14 @@ export function transformBoth<T, U, E extends Error, F extends Error>(
  * const userResult = await tryCatchAsync(fetchUser, '123');
  *
  * // Create mappers with proper error typing
- * const formatUser = mapperFn<FormatError>()((user) => {
+ * const formatUser = MapperFnAsync<FormatError>()((user) => {
  *   if (!user.firstName || !user.lastName) {
  *     throw new FormatError("User has incomplete name data");
  *   }
  *   return { ...user, displayName: `${user.firstName} ${user.lastName}` };
  * });
  *
- * const convertToAppError = mapperFn<ConversionError>()((err) => {
+ * const convertToAppError = MapperFnAsync<ConversionError>()((err) => {
  *   if (err instanceof NetworkError) {
  *     throw new ConversionError("Cannot convert network errors");
  *   }
@@ -539,8 +774,8 @@ export async function transformBothWithMappers<
   ME extends Error = never
 >(
   result: Result<T, E>,
-  successMapper: MapperFn<T, U, MS>,
-  errorMapper: MapperFn<E, F, ME>
+  successMapper: MapperFnAsync<T, U, MS>,
+  errorMapper: MapperFnAsync<E, F, ME>
 ): Promise<Result<U, F | MS | ME>> {
   if (result.success) {
     const mappingResult = await tryCatchAsync(
@@ -1022,56 +1257,7 @@ export function getValueOrDefault<T, E extends Error>(
 }
 
 /**
- * Transforms the success value of a Result (synchronous version)
- * @template T The original success type
- * @template U The transformed success type
- * @template E The original error type
- * @template M The mapper error type
- * @param result The result to transform
- * @param mapper A function that maps T to U (can throw errors of type M)
- * @returns A new Result with either the transformed value or either of the error types
- *
- * @remarks
- * Use this function when:
- * - You need to transform success values synchronously
- * - You want to maintain proper error typing
- * - You don't need the full power of a MapperFn
- *
- * This function properly captures and types any errors that occur during mapping.
- *
- * @example
- * ```typescript
- * const userResult = await tryCatchAsync(fetchUser, "123");
- *
- * // Parse the user's data synchronously
- * const parsedResult = mapSync(
- *   userResult,
- *   user => ({ ...user, age: parseInt(user.ageString) })
- * );
- *
- * if (parsedResult.success) {
- *   console.log(`User is ${parsedResult.data.age} years old`);
- * }
- * ```
- */
-export function mapSync<T, U, E extends Error, M extends Error = E>(
-  result: Result<T, E>,
-  mapper: (data: T) => U
-): Result<U, E | M> {
-  if (!result.success) {
-    return Result.failure(result.error); // Error type E
-  }
-
-  try {
-    const data = mapper(result.data);
-    return Result.success(data);
-  } catch (err) {
-    return Result.failure(normalizeError<M>(err));
-  }
-}
-
-/**
- * Chains operations where the mapper returns a Result (synchronous version)
+ * Synchronously apples a mapper that returns a Result
  * @template T The original success type
  * @template U The transformed success type
  * @template E The original error type
@@ -1083,18 +1269,16 @@ export function mapSync<T, U, E extends Error, M extends Error = E>(
  *
  * @remarks
  * Use this function when:
- * - You need to chain operations synchronously
  * - Your mapper function returns another Result
- * - You want proper error typing across the chain
  *
- * This is the synchronous counterpart to flatMapResult.
+ * This is the synchronous counterpart to flatMapAsync.
  *
  * @example
  * ```typescript
  * const userResult = await tryCatchAsync(fetchUser, "123");
  *
  * // Synchronously validate and transform user data
- * const validatedResult = flatMapSync(
+ * const validatedResult = flatMap(
  *   userResult,
  *   user => {
  *     if (!user.email) return Result.failure({
@@ -1107,7 +1291,7 @@ export function mapSync<T, U, E extends Error, M extends Error = E>(
  * );
  * ```
  */
-export function flatMapSync<
+export function flatMap<
   T,
   U,
   E extends Error,
@@ -1134,107 +1318,43 @@ export function flatMapSync<
 }
 
 /**
- * Recovers from errors by transforming them or providing fallback data (synchronous version)
+ *  Asynchronously apples a mapper that returns a Result
  * @template T The original success type
- * @template R The recovery success type
+ * @template U The transformed success type
  * @template E The original error type
- * @template F The handler's result error type
- * @template M The handler's thrown error type
+ * @template F The mapper's result error type
+ * @template M The mapper function's possible error type
  * @param result The original result
- * @param handler A function that maps ResultError<E> to Result<R, F> and may throw M
- * @returns A new Result with combined success and error types
+ * @param mapper A function that maps T to Promise<Result<U, F>> (can throw errors of type M)
+ * @returns A result that combines all possible error types
  *
  * @remarks
  * Use this function when:
- * - You need sophisticated error recovery without async operations
- * - Your recovery logic might produce new errors
- * - You want to maintain type safety throughout
+ * - Your mapper function returns a Promise of a Result
+ * - You want proper error typing across the async operation
  *
- * This is the synchronous version of recoverWithResult for cases where
- * you don't need async operations in your recovery logic.
+ * This is the asynchronous counterpart to flatMap.
  *
  * @example
  * ```typescript
- * const userResult = await tryCatchAsync(fetchUser, '123');
+ * const userResult = await tryCatchAsync(fetchUser, "123");
  *
- * // Synchronously recover from certain errors
- * const safeResult = recoverWithResultSync(
+ * // Asynchronously validate and transform user data
+ * const validatedResult = await flatMapAsync(
  *   userResult,
- *   error => {
- *     if (error.raw instanceof NotFoundError) {
- *       return Result.success({ id: '123', name: 'Guest User' });
- *     }
- *     // Rethrow other errors as app errors
- *     return Result.failure({
- *       raw: new AppError(`User fetch failed: ${error.message}`),
- *       message: `User fetch failed: ${error.message}`,
- *       code: CommonErrorCodes.UNKNOWN
+ *   async user => {
+ *     const isValid = await validateUserAsync(user);
+ *     if (!isValid) return Result.failure({
+ *       raw: new ValidationError("User validation failed"),
+ *       message: "User validation failed",
+ *       code: CommonErrorCodes.VALIDATION
  *     });
+ *     return Result.success({ ...user, validated: true });
  *   }
  * );
  * ```
  */
-export function recoverWithResultSync<
-  T,
-  R,
-  E extends Error,
-  F extends Error,
-  M extends Error = F
->(
-  result: Result<T, E>,
-  handler: (error: ExtractResultError<Result<T, E>>) => Result<R, F>
-): Result<T | R, F | M> {
-  if (!result.success) {
-    try {
-      const innerResult = handler(result.error); // Result<R, F>
-      if (innerResult.success) {
-        return Result.success(innerResult.data); // R
-      } else {
-        return Result.failure(innerResult.error); // F
-      }
-    } catch (err) {
-      return Result.failure(normalizeError<M>(err)); // M
-    }
-  }
-  return Result.success(result.data); // T
-}
-
-/**
- * Synchronously applies a MapperFn that returns a Result
- * @template T The original success type
- * @template U The success type of the inner Result
- * @template E The original error type
- * @template F The error type of the inner Result
- * @template M The mapper's thrown error type
- * @param result The original Result
- * @param mapper A MapperFn that returns a Result
- * @returns A new Result combining all possible error types
- *
- * @remarks
- * This is the synchronous version of flatMapResult. Use this when
- * the mapper function doesn't need to perform async operations.
- *
- * @example
- * ```typescript
- * const userResult = tryCatchSync(parseUserSync, userJson);
- *
- * // Create a mapper that returns a Result
- * const validateUser = mapperFn<ValidationError>()((user) => {
- *   if (!user.email) {
- *     return Result.failure({
- *       raw: new ValidationError("Email required"),
- *       message: "Email is required",
- *       code: "VALIDATION_ERROR"
- *     });
- *   }
- *   return Result.success(user);
- * });
- *
- * // Map with proper error typing
- * const validatedResult = flatMapWithMapperSync(userResult, validateUser);
- * ```
- */
-export function flatMapWithMapperSync<
+export async function flatMapAsync<
   T,
   U,
   E extends Error,
@@ -1242,28 +1362,20 @@ export function flatMapWithMapperSync<
   M extends Error = E
 >(
   result: Result<T, E>,
-  mapper: MapperFn<T, Result<U, F>, M>
-): Result<U, E | F | M> {
+  mapper: (data: T) => Promise<Result<U, F>>
+): Promise<Result<U, E | F | M>> {
   if (!result.success) {
     return Result.failure(result.error); // Error type E
   }
 
   try {
-    const innerResult = mapper.fn(result.data);
-
-    // Ensure innerResult is not a Promise
-    if (innerResult instanceof Promise) {
-      throw new Error(
-        "Expected synchronous Result, but got Promise<Result>. Use flatMapResult for async operations."
-      );
-    }
-
+    const innerResult = await mapper(result.data); // Type: Result<U, F>
     if (innerResult.success) {
-      return Result.success(innerResult.data);
+      return Result.success(innerResult.data); // U
     } else {
-      return Result.failure(innerResult.error);
+      return Result.failure(innerResult.error); // F
     }
   } catch (err) {
-    return Result.failure(normalizeError<M>(err));
+    return Result.failure(normalizeError<M>(err)); // M
   }
 }

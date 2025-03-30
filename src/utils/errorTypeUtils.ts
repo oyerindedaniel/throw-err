@@ -47,40 +47,6 @@ export function createErrorTypeGuard<T extends Error>(
 }
 
 /**
- * Creates a type guard function constrained to a specific error union type.
- * @template E The union of possible error types
- * @template T The specific error type to check (must be in E)
- * @param errorClass The constructor of the error class to check against
- * @param _checkTypes Optional phantom parameter that forces TypeScript to verify T is part of E
- * @returns A type guard function that narrows E to T
- * @example
- * ```typescript
- * class ApiError extends Error { data = { status: 500 }; }
- * class FormatError extends Error { data = { reason: "Invalid" }; }
- * type AppError = ApiError | FormatError;
- *
- * const isApiError = createConstrainedErrorGuard<AppError, ApiError>(ApiError);
- * const error: AppError = new ApiError("API failed");
- * if (isApiError(error)) {
- *   // error is narrowed to ApiError
- *   console.log(error.data.status); // Accesses status safely
- * }
- *
- * // This would cause a compile error because NetworkError is not in AppError union:
- * // const isWrong = createConstrainedErrorGuard<AppError, NetworkError>(NetworkError);
- * ```
- */
-export function createConstrainedErrorGuard<E extends Error, T extends E>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  errorClass: new (...args: any[]) => T,
-  // This phantom parameter helps TypeScript verify the constraint at compile time
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _checkTypes?: T extends E ? { type: T; union: E } : never
-): (err: E) => err is T {
-  return (err: E): err is T => err instanceof errorClass;
-}
-
-/**
  * Checks if an error has a specific name property
  * This can be useful when instanceof doesn't work in some contexts
  * @param err The error to check
