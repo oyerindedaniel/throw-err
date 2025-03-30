@@ -437,11 +437,7 @@ export const ChainableResult = {
    * Creates a Failure result from an Error
    */
   fromError<E extends Error>(error: E): Failure<E> {
-    return new Failure({
-      raw: error,
-      message: error.message,
-      code: getErrorCode(error),
-    });
+    return new Failure(normalizeTypedError(error));
   },
 
   /**

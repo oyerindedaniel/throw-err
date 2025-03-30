@@ -28,7 +28,7 @@ type ErrorClassReturn<T, Name extends string = string> = new (
  * @param defaultCode The default error code
  * @returns A custom error class
  */
-export function mkErrClass<Name extends string = string>(
+export function mkErrClass<Name extends string>(
   name: Name,
   defaultCode: ErrorCode
 ): ErrorClassReturn<Record<string, never>, Name>;

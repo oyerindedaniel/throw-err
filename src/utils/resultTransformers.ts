@@ -8,7 +8,11 @@ import { CommonErrorCodes } from "../core/ErrorCode";
 import { MapperFn, MapperFnAsync } from "./mapperFn";
 import { tryCatch, tryCatchAsync } from "../core/tryCatch";
 import { asyncFn } from "../core/asyncFn";
-import { getErrorCode, normalizeError } from "../utils/normalizeError";
+import {
+  getErrorCode,
+  normalizeError,
+  normalizeTypedError,
+} from "../utils/normalizeError";
 import { syncFn } from "../core/syncFn";
 
 /**
@@ -238,15 +242,17 @@ export async function mapWithMapperAsync<
  * - You want to add additional context to errors
  * - You're standardizing errors across different operations
  *
- * This is particularly useful when working with errors from external sources
- * that you want to normalize into your application's error types.
+ * This is particularly useful when error transformation involves asynchronous
+ * operations, such as logging or fetching additional error details. For a more
+ * sophisticated error handling approach that allows recovery with new success
+ * values, see `recoverWithMapper` (synchronous).
  *
  * @example
  * ```typescript
  * const result = await tryCatchAsync(fetchUser, '123');
  *
  * // Convert network errors to application errors
- * const appResult = mapError(
+ * const appResult = mapErr(
  *   result,
  *   err => {
  *     if (isErrorType(err, NetworkError)) {
@@ -257,18 +263,62 @@ export async function mapWithMapperAsync<
  * );
  * ```
  */
-export function mapError<T, E extends Error, F extends Error>(
+export function mapErr<T, E extends Error, F extends Error>(
   result: Result<T, E>,
   mapper: (error: E) => F
 ): Result<T, F> {
   if (!result.success) {
     const transformedError = mapper(result.error.raw);
+    return Result.failure(normalizeTypedError(transformedError));
+  }
+  return Result.success(result.data);
+}
 
-    return Result.failure({
-      raw: transformedError,
-      message: transformedError.message,
-      code: getErrorCode(transformedError),
-    });
+/**
+ * Transforms the error type in a Result (asynchronous version)
+ * @template T The success type
+ * @template E The original error type
+ * @template F The new error type
+ * @param result The result to transform
+ * @param mapper An async function that maps E to F
+ * @returns A Promise resolving to a new Result with the transformed error
+ *
+ * @remarks
+ * Use this function when:
+ * - You need to convert error types for API boundaries with async operations
+ * - You want to add additional context to errors via async lookups
+ * - You're standardizing errors across different operations asynchronously
+ *
+ * This is particularly useful when error transformation involves asynchronous
+ * operations, such as logging or fetching additional error details. For a more
+ * sophisticated error handling approach that allows recovery with new success
+ * values, see `recoverWithMapperAsync` (asynchronous).
+ *
+ * @example
+ * ```typescript
+ * const result = await tryCatchAsync(fetchUser, '123');
+ *
+ * // Asynchronously convert network errors to application errors with details
+ * const appResult = await mapErrAsync(
+ *   result,
+ *   async err => {
+ *     if (isErrorType(err, NetworkError)) {
+ *       const details = await fetchErrorDetails(err.code);
+ *       return new AppError(`Connection issue: ${err.message} - ${details}`);
+ *     }
+ *     return new AppError(`Unknown error: ${err.message}`);
+ *   }
+ * );
+ * // Type: Result<User, AppError>
+ * ```
+ */
+export async function mapErrAsync<T, E extends Error, F extends Error>(
+  result: Result<T, E>,
+  mapper: (error: E) => Promise<F>
+): Promise<Result<T, F>> {
+  if (!result.success) {
+    const transformedError = await mapper(result.error.raw);
+    return Result.failure(normalizeTypedError(transformedError));
   }
   return Result.success(result.data);
 }
@@ -281,7 +331,7 @@ export function mapError<T, E extends Error, F extends Error>(
  * @template F The error type of the inner Result
  * @template M The mapper's thrown error type
  * @param result The original Result
- * @param mapper A MapperFnAsync that returns a Result
+ * @param mapper A MapperFnSsync that maps T to Result<U, F> (can itself throw errors of type M)
  * @returns A new Result combining all possible error types
  *
  * @remarks
@@ -293,13 +343,9 @@ export function mapError<T, E extends Error, F extends Error>(
  * const userResult = tryCatchSync(parseUserSync, userJson);
  *
  * // Create a mapper that returns a Result
- * const validateUser = MapperFnAsync<ValidationError>()((user) => {
+ * const validateUser = MapperFn<ValidationError>()((user) => {
  *   if (!user.email) {
- *     return Result.failure({
- *       raw: new ValidationError("Email required"),
- *       message: "Email is required",
- *       code: "VALIDATION_ERROR"
- *     });
+ *     return Result.fromError(new ValidationError("Email required"));
  *   }
  *   return Result.success(user);
  * });
@@ -419,7 +465,7 @@ export async function flatMapWithMapperAsync<
  * @template F The handler's result error type
  * @template M The handler's thrown error type
  * @param result The original result
- * @param handler A function that maps ResultError<E> to Result<R, F> and may throw M
+ * @param mapper A MapperFnSync that maps an error of type E to Result<R, F> and may throw M
  * @returns A new Result with combined success and error types
  *
  * @remarks
@@ -428,31 +474,27 @@ export async function flatMapWithMapperAsync<
  * - Your recovery logic might produce new errors
  * - You want to maintain type safety throughout
  *
- * This is the synchronous version of recoverWithResult for cases where
- * you don't need async operations in your recovery logic.
+ * This is the synchronous counterpart to recoverWithMapperAsync, designed for cases where
+ * recovery logic doesn’t involve asynchronous operations.
  *
  * @example
  * ```typescript
  * const userResult = await tryCatchAsync(fetchUser, '123');
  *
  * // Synchronously recover from certain errors
- * const safeResult = recoverWithResultSync(
+ * const safeResult = recoverWithResult(
  *   userResult,
  *   error => {
- *     if (error.raw instanceof NotFoundError) {
+ *     if (isErrorType(error.raw, NotFoundError)) {
  *       return Result.success({ id: '123', name: 'Guest User' });
  *     }
- *     // Rethrow other errors as app errors
- *     return Result.failure({
- *       raw: new AppError(`User fetch failed: ${error.message}`),
- *       message: `User fetch failed: ${error.message}`,
- *       code: CommonErrorCodes.UNKNOWN
- *     });
+ *     return Result.failure(new AppError(`User fetch failed: ${error.message}`));
  *   }
  * );
+ * // Type: Result<User | { id: string, name: string }, AppError>
  * ```
  */
-export function recoverWithResult<
+export function recoverWithMapper<
   T,
   R,
   E extends Error,
@@ -460,11 +502,10 @@ export function recoverWithResult<
   M extends Error = F
 >(
   result: Result<T, E>,
-  handler: MapperFn<ExtractResultError<Result<T, E>>, Result<R, F>, M>
+  mapper: MapperFn<ExtractResultError<Result<T, E>>, Result<R, F>, M>
 ): Result<T | R, F | M> {
   if (!result.success) {
-    const handlerResult = tryCatch(syncFn<M>()(() => handler.fn(result.error)));
-
+    const handlerResult = tryCatch(syncFn<M>()(() => mapper.fn(result.error)));
     if (handlerResult.success) {
       const innerResult = handlerResult.data; // Result<R, F>
       if (innerResult.success) {
@@ -480,24 +521,24 @@ export function recoverWithResult<
 }
 
 /**
- * Recovers from errors by transforming them or providing fallback data
+ * Recovers from errors by transforming them or providing fallback data (asynchronous version)
  * @template T The original success type
  * @template R The recovery success type
  * @template E The original error type
  * @template F The handler's result error type
  * @template M The handler's thrown error type
  * @param result The original result
- * @param handler A MapperFnAsync that maps E to Result<R, F> and may throw M
- * @returns A new Result with combined success and error types
+ * @param mapper A MapperFnAsync that maps an error of type E to Result<R, F> and may throw M
+ * @returns A Promise resolving to a new Result with combined success and error types
  *
  * @remarks
  * Use this function when:
- * - You need sophisticated error recovery
+ * - You need sophisticated error recovery with async operations
  * - Your recovery logic might produce new errors
  * - You want to maintain type safety throughout
  *
- * This is the most powerful error recovery function, allowing recovery
- * paths that may themselves produce typed errors.
+ * This is the asynchronous counterpart to recoverWithMapper, allowing recovery
+ * paths that involve asynchronous operations and produce typed errors.
  *
  * @example
  * ```typescript
@@ -511,11 +552,11 @@ export function recoverWithResult<
  *   throw new AppError("Unrecoverable error");
  * });
  *
- * const finalResult = await recoverWithResult(userResult, cachedFetch);
- * // Type: Result<User, NetworkError | CacheError | AppError>
+ * const finalResult = await recoverWithMapperAsync(userResult, cachedFetch);
+ * // Type: Result<User, CacheError | AppError>
  * ```
  */
-export async function recoverWithResultAsync<
+export async function recoverWithMapperAsync<
   T,
   R,
   E extends Error,
@@ -523,13 +564,12 @@ export async function recoverWithResultAsync<
   M extends Error = F
 >(
   result: Result<T, E>,
-  handler: MapperFnAsync<ExtractResultError<Result<T, E>>, Result<R, F>, M>
-): Promise<Result<T | R, E | F | M>> {
+  mapper: MapperFnAsync<ExtractResultError<Result<T, E>>, Result<R, F>, M>
+): Promise<Result<T | R, F | M>> {
   if (!result.success) {
     const handlerResult = await tryCatchAsync(
-      asyncFn<M>()(async () => Promise.resolve(handler.fn(result.error)))
+      asyncFn<M>()(async () => Promise.resolve(mapper.fn(result.error)))
     );
-
     if (handlerResult.success) {
       const innerResult = handlerResult.data; // Result<R, F>
       if (innerResult.success) {
@@ -545,105 +585,98 @@ export async function recoverWithResultAsync<
 }
 
 /**
- * Functions to recover from failed Results with fallback values
+ * Synchronously recovers from a failed Result with a fallback value
+ * @template T The original success type
+ * @template R The fallback success type
+ * @template E The original error type
+ * @param result The original result
+ * @param fallback A value or synchronous function to provide R on failure
+ * @returns Original success or fallback on failure, synchronously
+ *
+ * @remarks
+ * When providing a function as fallback:
+ * - It MUST NOT have side effects (network calls, state changes, etc.)
+ * - It MUST NOT throw errors (all error handling should happen inside the function)
+ * - For complex error handling, consider using `recoverWithMapper` instead
+ *
+ * @example
+ * ```typescript
+ * const userResult = await tryCatchAsync(fetchUser, '123');
+ * const safeUser = recover.sync(userResult, { name: 'Guest User' });
+ * ```
  */
-export const recover = {
-  /**
-   * Synchronously recovers from a failed Result with a fallback value
-   * @template T The original success type
-   * @template R The fallback success type
-   * @template E The original error type
-   * @param result The original result
-   * @param fallback A value or synchronous function to provide R on failure
-   * @returns Original success or fallback on failure, synchronously
-   *
-   * @remarks
-   * When providing a function as fallback:
-   * - It MUST NOT have side effects (network calls, state changes, etc.)
-   * - It MUST NOT throw errors (all error handling should happen inside the function)
-   * - For async recovery, use recover.async instead
-   *
-   * @example
-   * ```typescript
-   * const userResult = await tryCatchAsync(fetchUser, '123');
-   * const safeUser = recover.sync(userResult, { name: 'Guest User' });
-   * ```
-   */
-  sync<T, R, E extends Error>(
-    result: Result<T, E>,
-    fallback: R | ((error: ExtractResultError<Result<T, E>>) => R)
-  ): SuccessResult<T | R> {
-    if (result.success) {
-      return Result.success(result.data);
+export function recoverWithDefault<T, R, E extends Error>(
+  result: Result<T, E>,
+  fallback: R | ((error: ExtractResultError<Result<T, E>>) => R)
+): SuccessResult<T | R> {
+  if (result.success) {
+    return Result.success(result.data);
+  }
+
+  try {
+    if (typeof fallback === "function") {
+      const fn = fallback as (error: ExtractResultError<Result<T, E>>) => R;
+      return Result.success(fn(result.error));
+    }
+    return Result.success(fallback);
+  } catch {
+    return Result.success({} as R);
+  }
+}
+
+/**
+ * Asynchronously recovers from a failed Result with a fallback value or async function
+ * @template T The original success type
+ * @template R The fallback success type
+ * @template E The original error type
+ * @param result The original result
+ * @param fallback A Promise, value, or async function to provide R on failure
+ * @returns Original success or fallback on failure, as a Promise
+ *
+ * @remarks
+ * When providing a function as fallback:
+ * - It MUST NOT have side effects (network calls, state changes, etc.)
+ * - It MUST NOT throw errors (all error handling should happen inside the function)
+ * - For complex error handling, consider using `recoverWithMapperAsync` instead
+ *
+ * @example
+ * ```typescript
+ * const dataResult = await tryCatchAsync(fetchData, 'endpoint');
+ * const processedData = await recover.async(dataResult, async (err) => {
+ *   const cachedData = await getCachedData();
+ *   return { ...cachedData, fromCache: true };
+ * });
+ * ```
+ */
+export async function recoverWithDefaultAsync<T, R, E extends Error>(
+  result: Result<T, E>,
+  fallback:
+    | R
+    | Promise<R>
+    | ((error: ExtractResultError<Result<T, E>>) => R | Promise<R>)
+): Promise<SuccessResult<T | R>> {
+  if (result.success) {
+    return Promise.resolve(Result.success(result.data));
+  }
+
+  try {
+    let resolvedFallback: R | Promise<R>;
+
+    if (typeof fallback === "function") {
+      resolvedFallback = (
+        fallback as (error: ExtractResultError<Result<T, E>>) => R | Promise<R>
+      )(result.error);
+    } else {
+      resolvedFallback = fallback;
     }
 
-    try {
-      if (typeof fallback === "function") {
-        const fn = fallback as (error: ExtractResultError<Result<T, E>>) => R;
-        return Result.success(fn(result.error));
-      }
-      return Result.success(fallback);
-    } catch {
-      return Result.success({} as R);
-    }
-  },
-
-  /**
-   * Asynchronously recovers from a failed Result with a fallback value or async function
-   * @template T The original success type
-   * @template R The fallback success type
-   * @template E The original error type
-   * @param result The original result
-   * @param fallback A Promise, value, or async function to provide R on failure
-   * @returns Original success or fallback on failure, as a Promise
-   *
-   * @remarks
-   * When providing a function as fallback:
-   * - It MUST NOT have side effects (network calls, state changes, etc.)
-   * - It MUST NOT throw errors (all error handling should happen inside the function)
-   * - For complex error handling, consider using `recoverWithResult` instead
-   *
-   * @example
-   * ```typescript
-   * const dataResult = await tryCatchAsync(fetchData, 'endpoint');
-   * const processedData = await recover.async(dataResult, async (err) => {
-   *   const cachedData = await getCachedData();
-   *   return { ...cachedData, fromCache: true };
-   * });
-   * ```
-   */
-  async async<T, R, E extends Error>(
-    result: Result<T, E>,
-    fallback:
-      | R
-      | Promise<R>
-      | ((error: ExtractResultError<Result<T, E>>) => R | Promise<R>)
-  ): Promise<SuccessResult<T | R>> {
-    if (result.success) {
-      return Promise.resolve(Result.success(result.data));
-    }
-
-    try {
-      let resolvedFallback: R | Promise<R>;
-
-      if (typeof fallback === "function") {
-        resolvedFallback = (
-          fallback as (
-            error: ExtractResultError<Result<T, E>>
-          ) => R | Promise<R>
-        )(result.error);
-      } else {
-        resolvedFallback = fallback;
-      }
-
-      return Promise.resolve(resolvedFallback).then((data) =>
-        Result.success(data)
-      );
-    } catch {
-      return Promise.resolve(Result.success({} as R));
-    }
-  },
-};
+    return Promise.resolve(resolvedFallback).then((data) =>
+      Result.success(data)
+    );
+  } catch {
+    return Promise.resolve(Result.success({} as R));
+  }
+}
 
 export function combineResults<T, E extends Error>(
   results: Result<T, E>[]
