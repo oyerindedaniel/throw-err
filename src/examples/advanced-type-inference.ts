@@ -3,7 +3,7 @@ import {
   mkErrClass,
   compose,
   composeFns,
-  mapError,
+  mapErr,
   withCode,
   isErrorType,
   mapperFn,
@@ -460,7 +460,7 @@ async function runAdvancedExample() {
       }
     );
 
-    const mappedResult = mapError(errorResult, (originalError: Error) => {
+    const mappedResult = mapErr(errorResult, (originalError) => {
       // Convert all errors to a standardized AppError
       return new AppError(`Application error: ${originalError.message}`, {
         data: {

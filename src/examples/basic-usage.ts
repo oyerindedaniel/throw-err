@@ -2,7 +2,7 @@ import {
   asyncFn,
   tryCatchAsync,
   mkErrClass,
-  recoverWithResultAsync,
+  recoverWithMapperAsync,
   retry,
   compose,
   mapperFn,
@@ -193,11 +193,11 @@ async function runExample() {
       }
     }
 
-    // 4. Using recoverWithResultAsync to recover from errors
-    console.log("\n4. Handling errors with recoverWithResultAsync:");
+    // 4. Using recoverWithMapperAsync to recover from errors
+    console.log("\n4. Handling errors with recoverWithMapperAsync:");
 
     // Recovery with same type
-    const userWithFallback = await recoverWithResultAsync(
+    const userWithFallback = await recoverWithMapperAsync(
       await tryCatchAsync(fetchUserApi, "999"), // This will likely fail
       mapperFnAsync<ApiErrorInstance>()(() =>
         Result.success({
@@ -211,7 +211,7 @@ async function runExample() {
     console.log("User with fallback (same type):", userWithFallback);
 
     // Recovery with different type
-    const userSummary = await recoverWithResultAsync(
+    const userSummary = await recoverWithMapperAsync(
       await tryCatchAsync(fetchUserApi, "999"), // This will likely fail
       mapperFnAsync<ApiErrorInstance>()(() =>
         Result.success({
@@ -223,13 +223,13 @@ async function runExample() {
 
     console.log("User with fallback (different type):", userSummary);
 
-    // Error transformation with recoverWithResultAsync
-    console.log("\n5. Transforming errors with recoverWithResultAsync:");
+    // Error transformation with recoverWithMapperAsync
+    console.log("\n5. Transforming errors with recoverWithMapperAsync:");
 
     // Create a unified application error
     const AppError = mkErrClass("AppError", "APP_ERROR");
 
-    const transformedError = await recoverWithResultAsync(
+    const transformedError = await recoverWithMapperAsync(
       await tryCatchAsync(fetchUserApi, "999"), // This will fail with ApiError
       mapperFnAsync<ApiErrorInstance>()((error) =>
         Result.failure({

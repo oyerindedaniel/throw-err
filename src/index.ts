@@ -29,7 +29,6 @@ export { compose, composeFns, composeMany } from "./core/compose";
 
 // Utility functions
 export {
-  // New names (preferred)
   map,
   mapAsync,
   mapWithMapper,
@@ -43,18 +42,21 @@ export {
   mapErr,
   mapErrAsync,
   transformBoth,
+  transformBothAsync,
   transformBothWithMappers,
+  transformBothWithMappersAsync,
   recoverWithDefault,
   recoverWithDefaultAsync,
   filterResult,
   collectResults,
+  combineResults,
+  sequenceResults,
   CollectedErrors,
   tap,
   tapError,
   getOrElse,
-  getValueOrDefault,
-  resultToPromise,
-  promiseToResult,
+  toPromise,
+  fromPromise,
 } from "./utils/resultTransformers";
 
 export { retry, timeout, TimeoutError } from "./utils/asyncUtils";
