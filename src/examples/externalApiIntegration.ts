@@ -1,12 +1,12 @@
 import { Result, ResultError } from "../types/Result";
 import {
-  promiseToResult,
-  mapSync,
-  recover,
+  fromPromise,
+  map,
   tap,
   tapError,
   filterResult,
-  fromPromise,
+  recoverWithDefault,
+
 } from "../utils/resultTransformers";
 import { ChainableResult, Success, Failure } from "../utils/chainableResult";
 import { CommonErrorCodes } from "../core/ErrorCode";
@@ -29,7 +29,7 @@ interface RateLimitErrorData {
   retryAfter: number;
 }
 
-const ApiError = mkErrClass<ApiErrorData>(
+const ApiError = mkErrClass<ApiErrorData, "ApiError">(
   "ApiError",
   CommonErrorCodes.NETWORK,
   {
@@ -38,7 +38,7 @@ const ApiError = mkErrClass<ApiErrorData>(
   }
 );
 
-const ValidationError = mkErrClass<ValidationErrorData>(
+const ValidationError = mkErrClass<ValidationErrorData, "ValidationError">(
   "ValidationError",
   CommonErrorCodes.VALIDATION,
   {
@@ -47,7 +47,7 @@ const ValidationError = mkErrClass<ValidationErrorData>(
   }
 );
 
-const RateLimitError = mkErrClass<RateLimitErrorData>(
+const RateLimitError = mkErrClass<RateLimitErrorData, "RateLimitError">(
   "RateLimitError",
   RATE_LIMIT_ERROR_CODE,
   {
@@ -182,7 +182,7 @@ async function fetchUserNonChainable(id: string): Promise<Result<User, Error>> {
   console.log("Fetching user with non-chainable approach...");
 
   // Convert the Promise to a Result
-  const userResult = await promiseToResult(api.fetchUser(id));
+  const userResult = await fromPromise(api.fetchUser(id));
 
   // Log the success or failure
   if (userResult.success) {
@@ -208,7 +208,7 @@ async function fetchAndProcessUserNonChainable(
   console.log("Fetching and processing user with non-chainable approach...");
 
   // Convert the Promise to a Result
-  const userResult = await promiseToResult(api.fetchUser(id));
+  const userResult = await fromPromise(api.fetchUser(id));
 
   // Add logging side effects
   const loggedResult = tap(userResult, (user: User) => {
@@ -236,13 +236,13 @@ async function fetchAndProcessUserNonChainable(
   );
 
   // Map to add display name
-  const mappedResult = mapSync(validatedResult, (user: User) => ({
+  const mappedResult = map(validatedResult, (user: User) => ({
     ...user,
     displayName: `${user.name} <${user.email}>`,
   }));
 
   // Provide fallback for any errors
-  return recover.sync(mappedResult, (error: ResultError<Error>) => {
+  return recoverWithDefault(mappedResult, (error: ResultError<Error>) => {
     if (error.raw instanceof RateLimitError) {
       console.log(
         `Rate limited. Retry after ${error.raw.data.retryAfter} seconds`
@@ -297,13 +297,13 @@ async function fetchAndProcessUserChainable(id: string): Promise<ExtendedUser> {
         return error;
       }
     )
-    .mapSync(
+    .map(
       (user: User): ExtendedUser => ({
         ...user,
         displayName: `${user.name} <${user.email}>`,
       })
     )
-    .recoverWithResult((error: ResultError<Error>) => {
+    .recoverWithMapper((error: ResultError<Error>) => {
       if (error.raw instanceof RateLimitError) {
         console.log(
           `Rate limited. Retry after ${error.raw.data.retryAfter} seconds`
@@ -338,14 +338,14 @@ async function updateUserProfileNonChainable(
   console.log("Updating user profile with non-chainable approach...");
 
   // First fetch the user
-  const userResult = await promiseToResult(api.fetchUser(id));
+  const userResult = await fromPromise(api.fetchUser(id));
 
   if (!userResult.success) {
     return userResult; // Return early if fetch failed
   }
 
   // Then update with new data
-  const updateResult = await promiseToResult(
+  const updateResult = await fromPromise(
     api.updateUser(id, {
       name,
       email: userResult.data.email,
@@ -450,7 +450,7 @@ async function fetchWithRetryNonChainable(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     console.log(`Attempt ${attempt} of ${maxRetries}...`);
 
-    const result = await promiseToResult(api.fetchUser(id));
+    const result = await fromPromise(api.fetchUser(id));
 
     if (result.success) {
       return result;

@@ -85,6 +85,7 @@ export function mkErrClass<
       super(message);
       this.code = options?.code ?? defaultCode ?? CommonErrorCodes.UNKNOWN;
       this.data = options?.data ?? (defaultData as T);
+      
 
       // This is needed for proper instanceof checks in transpiled ES5 code
       Object.setPrototypeOf(this, CustomError.prototype);

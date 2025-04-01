@@ -2,7 +2,7 @@ import {
   asyncFn,
   tryCatchAsync,
   mkErrClass,
-  recoverWithMapperAsync,
+  recoverAsync,
   retry,
   compose,
   mapperFn,
@@ -12,7 +12,7 @@ import {
   createErrorTypeGuard,
   Result,
 } from "..";
-import { mapWithMapper } from "../utils/resultTransformers";
+import { mapWith } from "../utils/resultTransformers";
 
 // Custom error types
 interface ApiErrorData extends Record<string, unknown> {
@@ -132,7 +132,7 @@ async function runExample() {
     const nameMapper = mapperFn<ApiErrorInstance>()(
       (user: { id: string; name: string; email: string }) => user.name
     );
-    const nameResult = await mapWithMapper(userResult, nameMapper);
+    const nameResult = await mapWith(userResult, nameMapper);
     console.log(
       "User name result:",
       nameResult.success ? nameResult.data : nameResult.error.message
@@ -177,7 +177,7 @@ async function runExample() {
     });
 
     // Apply the transformation - will return Result<Profile, ApiError | FormatError>
-    const profileResult = mapWithMapper(userResult, userProfileMapper);
+    const profileResult = mapWith(userResult, userProfileMapper);
 
     if (profileResult.success) {
       console.log("✅ User profile created:", profileResult.data);
@@ -186,6 +186,7 @@ async function runExample() {
         console.log("❌ API error:", profileResult.error.message);
         console.log("   Status:", profileResult.error.raw.data.status);
         console.log("   URL:", profileResult.error.raw.data.url);
+        
       } else {
         console.log("❌ Format error:", profileResult.error.message);
         console.log("   Reason:", profileResult.error.raw.data.reason);
@@ -197,7 +198,7 @@ async function runExample() {
     console.log("\n4. Handling errors with recoverWithMapperAsync:");
 
     // Recovery with same type
-    const userWithFallback = await recoverWithMapperAsync(
+    const userWithFallback = await recoverAsync(
       await tryCatchAsync(fetchUserApi, "999"), // This will likely fail
       mapperFnAsync<ApiErrorInstance>()(() =>
         Result.success({
@@ -211,7 +212,7 @@ async function runExample() {
     console.log("User with fallback (same type):", userWithFallback);
 
     // Recovery with different type
-    const userSummary = await recoverWithMapperAsync(
+    const userSummary = await recoverAsync(
       await tryCatchAsync(fetchUserApi, "999"), // This will likely fail
       mapperFnAsync<ApiErrorInstance>()(() =>
         Result.success({
@@ -229,7 +230,7 @@ async function runExample() {
     // Create a unified application error
     const AppError = mkErrClass("AppError", "APP_ERROR");
 
-    const transformedError = await recoverWithMapperAsync(
+    const transformedError = await recoverAsync(
       await tryCatchAsync(fetchUserApi, "999"), // This will fail with ApiError
       mapperFnAsync<ApiErrorInstance>()((error) =>
         Result.failure({

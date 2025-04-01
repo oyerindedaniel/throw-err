@@ -13,7 +13,7 @@ interface ApiErrorData extends Record<string, unknown> {
   url: string;
 }
 
-const ApiError = mkErrClass<ApiErrorData>("ApiError", "API_ERROR", {
+const ApiError = mkErrClass<ApiErrorData, "ApiError">("ApiError", "API_ERROR", {
   status: 0,
   url: "",
 });

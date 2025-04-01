@@ -9,7 +9,7 @@ import { tryCatch, tryCatchAsync } from "../core/tryCatch";
 import { asyncFn } from "../core/asyncFn";
 import { normalizeError, normalizeTypedError } from "../utils/normalizeError";
 import { syncFn } from "../core/syncFn";
-import { mkErrClass } from "../core/mkErrClass";
+import { CollectedErrors } from "./customErrors";
 
 /**
  * Simple map function that transforms the success value of a Result
@@ -126,7 +126,7 @@ export async function mapAsync<T, U, E extends Error>(
  *   - You need to transform success values synchronously while handling potential errors.
  *   - The transformation **might throw specific errors** that should be properly captured.
  *   - You want strong type safety by using a `MapperFn` for structured error handling.
- * - For **asynchronous transformations**, use `mapWithMapperAsync` instead.
+ * - For **asynchronous transformations**, use `mapWithAsync` instead.
  *
  * @example
  * ```typescript
@@ -138,10 +138,10 @@ export async function mapAsync<T, U, E extends Error>(
  *   return num;
  * });
  *
- * const transformedResult = mapWithMapper(numberResult, parseNumber);
+ * const transformedResult = mapWith(numberResult, parseNumber);
  * ```
  */
-export function mapWithMapper<T, U, E extends Error, M extends Error = E>(
+export function mapWith<T, U, E extends Error, M extends Error = E>(
   result: Result<T, E>,
   mapper: MapperFn<T, U, M>
 ): Result<U, E | M> {
@@ -204,7 +204,7 @@ export function mapWithMapper<T, U, E extends Error, M extends Error = E>(
  * }
  * ```
  */
-export async function mapWithMapperAsync<
+export async function mapWithAsync<
   T,
   U,
   E extends Error,
@@ -246,7 +246,7 @@ export async function mapWithMapperAsync<
  * This is particularly useful when error transformation involves asynchronous
  * operations, such as logging or fetching additional error details. For a more
  * sophisticated error handling approach that allows recovery with new success
- * values, see `recoverWithMapper` (synchronous).
+ * values, see `recover` (synchronous).
  *
  * @example
  * ```typescript
@@ -293,7 +293,7 @@ export function mapErr<T, E extends Error, F extends Error>(
  * This is particularly useful when error transformation involves asynchronous
  * operations, such as logging or fetching additional error details. For a more
  * sophisticated error handling approach that allows recovery with new success
- * values, see `recoverWithMapperAsync` (asynchronous).
+ * values, see `recoverAsync` (asynchronous).
  *
  * @example
  * ```typescript
@@ -336,7 +336,7 @@ export async function mapErrAsync<T, E extends Error, F extends Error>(
  * @returns A new Result combining all possible error types
  *
  * @remarks
- * This is the synchronous version of flatMapWithMapperAsync. Use this when
+ * This is the synchronous version of flatMapWithAsync. Use this when
  * the mapper function doesn't need to perform async operations.
  *
  * @example
@@ -352,10 +352,10 @@ export async function mapErrAsync<T, E extends Error, F extends Error>(
  * });
  *
  * // Map with proper error typing
- * const validatedResult = flatMapWithMapper(userResult, validateUser);
+ * const validatedResult = flatMapWith(userResult, validateUser);
  * ```
  */
-export function flatMapWithMapper<
+export function flatMapWith<
   T,
   U,
   E extends Error,
@@ -414,7 +414,7 @@ export function flatMapWithMapper<
  * });
  *
  * // Type safety is maintained, F is inferred as NotFoundError
- * const postsResult = await flatMapWithMapperAsync(userResult, fetchPosts);
+ * const postsResult = await flatMapWithAsync(userResult, fetchPosts);
  * // Result<Post[], FetchError | NotFoundError | DatabaseError>
  *
  * if (!postsResult.success) {
@@ -428,7 +428,7 @@ export function flatMapWithMapper<
  * }
  * ```
  */
-export async function flatMapWithMapperAsync<
+export async function flatMapWithAsync<
   T,
   U,
   E extends Error,
@@ -475,7 +475,7 @@ export async function flatMapWithMapperAsync<
  * - Your recovery logic might produce new errors
  * - You want to maintain type safety throughout
  *
- * This is the synchronous counterpart to recoverWithMapperAsync, designed for cases where
+ * This is the synchronous counterpart to recoverAsync, designed for cases where
  * recovery logic doesn't involve asynchronous operations.
  *
  * @example
@@ -490,11 +490,11 @@ export async function flatMapWithMapperAsync<
  *   return Result.failure(new AppError(`User fetch failed: ${error.message}`));
  * });
  *
- * const safeResult = recoverWithMapper(userResult, recoverMapper);
+ * const safeResult = recover(userResult, recoverMapper);
  * // Type: Result<User, AppError>
  * ```
  */
-export function recoverWithMapper<
+export function recover<
   T,
   R,
   E extends Error,
@@ -537,7 +537,7 @@ export function recoverWithMapper<
  * - Your recovery logic might produce new errors
  * - You want to maintain type safety throughout
  *
- * This is the asynchronous counterpart to recoverWithMapper, allowing recovery
+ * This is the asynchronous counterpart to recover, allowing recovery
  * paths that involve asynchronous operations and produce typed errors.
  *
  * @example
@@ -552,11 +552,11 @@ export function recoverWithMapper<
  *   throw new AppError("Unrecoverable error");
  * });
  *
- * const finalResult = await recoverWithMapperAsync(userResult, cachedFetch);
+ * const finalResult = await recoverAsync(userResult, cachedFetch);
  * // Type: Result<User, CacheError | AppError>
  * ```
  */
-export async function recoverWithMapperAsync<
+export async function recoverAsync<
   T,
   R,
   E extends Error,
@@ -597,15 +597,15 @@ export async function recoverWithMapperAsync<
  * When providing a function as fallback:
  * - It MUST NOT have side effects (network calls, state changes, etc.)
  * - It MUST NOT throw errors (all error handling should happen inside the function)
- * - For complex error handling, consider using `recoverWithMapper` instead
+ * - For complex error handling, consider using `recover` instead
  *
  * @example
  * ```typescript
  * const userResult = await tryCatchAsync(fetchUser, '123');
- * const safeUser = recoverWithDefault(userResult, { name: 'Guest User' });
+ * const safeUser = orElse(userResult, { name: 'Guest User' });
  * ```
  */
-export function recoverWithDefault<T, R, E extends Error>(
+export function orElse<T, R, E extends Error>(
   result: Result<T, E>,
   fallback: R | ((error: ExtractResultError<Result<T, E>>) => R)
 ): SuccessResult<T | R> {
@@ -641,18 +641,18 @@ export function recoverWithDefault<T, R, E extends Error>(
  * When providing a function as fallback:
  * - It MUST NOT have side effects (network calls, state changes, etc.)
  * - It MUST NOT throw errors (all error handling should happen inside the function)
- * - For complex error handling, consider using `recoverWithMapperAsync` instead
+ * - For complex error handling, consider using `recoverAsync` instead
  *
  * @example
  * ```typescript
  * const dataResult = await tryCatchAsync(fetchData, 'endpoint');
- * const processedData = await recoverWithDefaultAsync(dataResult, async (err) => {
+ * const processedData = await orElseAsync(dataResult, async (err) => {
  *   const cachedData = await getCachedData();
  *   return { ...cachedData, fromCache: true };
  * });
  * ```
  */
-export async function recoverWithDefaultAsync<T, R, E extends Error>(
+export async function orElseAsync<T, R, E extends Error>(
   result: Result<T, E>,
   fallback:
     | R
@@ -691,19 +691,6 @@ export async function recoverWithDefaultAsync<T, R, E extends Error>(
 }
 
 /**
- * A special error type for representing multiple collected errors
- * @template E The error type contained in the collection
- */
-type CollectedErrorData<E extends Error> = {
-  errors: ResultError<E>[];
-};
-
-export const CollectedErrors = mkErrClass<
-  CollectedErrorData<Error>,
-  "CollectedErrors"
->("CollectedErrors", "COLLECTED_ERRORS", { errors: [] });
-
-/**
  * Collects results from multiple operations, grouping successes and failures
  * @template T The success type
  * @template E The error type
@@ -716,7 +703,7 @@ export const CollectedErrors = mkErrClass<
  * - You want to collect all errors instead of failing on the first one
  * - You need access to all the errors for reporting or analysis
  *
- * Unlike combineResults which fails fast on the first error,
+ * Unlike combineAll which fails fast on the first error,
  * this collects all success and error results.
  *
  * @example
@@ -786,7 +773,7 @@ export function collectResults<T, E extends Error>(
  * const userResult = await tryCatchAsync(fetchUser, '123');
  *
  * // Filter out users without a complete profile
- * const validUserResult = filterResult(
+ * const validUserResult = filter(
  *   userResult,
  *   user => Boolean(user.name && user.email),
  *   user => new ValidationError(`User ${user.id} has incomplete profile`)
@@ -798,7 +785,7 @@ export function collectResults<T, E extends Error>(
  * }
  * ```
  */
-export function filterResult<T, E extends Error>(
+export function filter<T, E extends Error>(
   result: Result<T, E>,
   predicate: (data: T) => boolean,
   errorFn: (data: T) => E
@@ -874,7 +861,7 @@ export function tap<T, E extends Error>(
  * const userResult = await tryCatchAsync(fetchUser, '123');
  *
  * // Log errors without changing the Result
- * const result = tapError(userResult, err => {
+ * const result = tapErr(userResult, err => {
  *   console.error(`Failed to fetch user: ${err.message}`);
  *   errorReporting.captureException(err.raw);
  * });
@@ -885,7 +872,7 @@ export function tap<T, E extends Error>(
  * }
  * ```
  */
-export function tapError<T, E extends Error>(
+export function tapErr<T, E extends Error>(
   result: Result<T, E>,
   fn: (error: ResultError<E>) => void
 ): Result<T, E> {
@@ -905,7 +892,7 @@ export function tapError<T, E extends Error>(
  * @returns Either the success data or the default value
  *
  * @remarks
- * Unlike recoverWithDefault which returns a Result, this
+ * Unlike orElse which returns a Result, this
  * directly returns the unwrapped value. This is useful when
  * you just want the value and don't need to keep working with Results.
  *
@@ -1171,7 +1158,7 @@ export async function flatMapAsync<
  * const ageResult = Result.success(30);
  * const emailResult = Result.success("alice@example.com");
  *
- * const combined = combineResults([nameResult, ageResult, emailResult]);
+ * const combined = combineAll([nameResult, ageResult, emailResult]);
  * // Result<string[], Error>
  *
  * if (combined.success) {
@@ -1182,7 +1169,7 @@ export async function flatMapAsync<
  * }
  * ```
  */
-export function combineResults<T, E extends Error>(
+export function combineAll<T, E extends Error>(
   results: Result<T, E>[]
 ): Result<T[], E> {
   const successes: T[] = [];
@@ -1195,6 +1182,7 @@ export function combineResults<T, E extends Error>(
   }
   return Result.success(successes);
 }
+
 
 /**
  * Waits for multiple Result Promises to resolve and combines them
@@ -1238,7 +1226,7 @@ export async function sequenceResults<T, E extends Error>(
   promises: Promise<Result<T, E>>[]
 ): Promise<Result<T[], E>> {
   const results = await Promise.all(promises);
-  return combineResults(results);
+  return combineAll(results);
 }
 
 /**
@@ -1265,14 +1253,14 @@ export async function sequenceResults<T, E extends Error>(
  * const result = await tryCatch(fetchUser, '123');
  *
  * // Transform both success and error cases
- * const transformed = transformBoth(
+ * const transformed = transform(
  *   result,
  *   user => ({ ...user, displayName: `${user.firstName} ${user.lastName}` }),
  *   err => new AppError(`Failed to fetch user: ${err.message}`)
  * );
  * ```
  */
-export function transformBoth<T, U, E extends Error, F extends Error>(
+export function transform<T, U, E extends Error, F extends Error>(
   result: Result<T, E>,
   successMapper: (data: T) => U,
   errorMapper: (error: E) => F
@@ -1317,7 +1305,7 @@ export function transformBoth<T, U, E extends Error, F extends Error>(
  * - The transformations are simple and unlikely to throw complex errors
  * - You want to process both paths in a single operation
  *
- * This is the asynchronous version of transformBoth, useful when transformations
+ * This is the asynchronous version of transform, useful when transformations
  * require asynchronous operations like API calls or database lookups.
  *
  * @example
@@ -1325,7 +1313,7 @@ export function transformBoth<T, U, E extends Error, F extends Error>(
  * const result = await tryCatchAsync(fetchUser, '123');
  *
  * // Transform both success and error cases asynchronously
- * const transformed = await transformBothAsync(
+ * const transformed = await transformAsync(
  *   result,
  *   async user => {
  *     const details = await fetchUserDetails(user.id);
@@ -1338,7 +1326,7 @@ export function transformBoth<T, U, E extends Error, F extends Error>(
  * );
  * ```
  */
-export async function transformBothAsync<
+export async function transformAsync<
   T,
   U,
   E extends Error,
@@ -1391,8 +1379,8 @@ export async function transformBothAsync<
  * - Your transformations might throw errors themselves
  * - You need comprehensive type safety
  *
- * This is a more robust version of transformBoth that handles errors thrown during mapping.
- * For async transformations, use transformBothWithMappersAsync instead.
+ * This is a more robust version of transform that handles errors thrown during mapping.
+ * For async transformations, use transformWithAsync instead.
  *
  * @example
  * ```typescript
@@ -1414,7 +1402,7 @@ export async function transformBothAsync<
  * });
  *
  * // Get a Result with comprehensive error typing
- * const result = transformBothWithMappers(
+ * const result = transformWith(
  *   userResult,
  *   formatUser,
  *   convertToAppError
@@ -1424,7 +1412,7 @@ export async function transformBothAsync<
  * // Result<FormattedUser, AppError | FormatError | ConversionError>
  * ```
  */
-export function transformBothWithMappers<
+export function transformWith<
   T,
   U,
   E extends Error,
@@ -1479,7 +1467,7 @@ export function transformBothWithMappers<
  * - Your transformations might throw errors themselves
  * - You need comprehensive type safety for async operations
  *
- * This is the asynchronous version of transformBothWithMappers for cases
+ * This is the asynchronous version of transformWith for cases
  * where your mapping functions need to perform async operations.
  *
  * @example
@@ -1504,14 +1492,14 @@ export function transformBothWithMappers<
  * });
  *
  * // Get a Result with comprehensive error typing
- * const result = await transformBothWithMappersAsync(
+ * const result = await transformWithAsync(
  *   userResult,
  *   formatUser,
  *   convertToAppError
  * );
  * ```
  */
-export async function transformBothWithMappersAsync<
+export async function transformWithAsync<
   T,
   U,
   E extends Error,

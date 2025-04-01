@@ -10,7 +10,7 @@ import {
   AsyncFnWithErr,
   asyncFn,
   mapperFnAsync,
-  flatMapWithMapperAsync,
+  flatMapWithAsync,
 } from "..";
 
 // Define complex error hierarchy
@@ -397,7 +397,7 @@ async function runAdvancedExample() {
         userService.validateUser,
         user
       );
-      return flatMapWithMapperAsync(
+      return flatMapWithAsync(
         validationResult,
         mapperFn<NetworkErrorInstance | NotFoundErrorInstance>()(
           async (validUser: User) =>
@@ -406,7 +406,7 @@ async function runAdvancedExample() {
       );
     });
 
-    const validatedWithPostsResult = await flatMapWithMapperAsync(
+    const validatedWithPostsResult = await flatMapWithAsync(
       user123Result,
       userToValidatedMapper
     );

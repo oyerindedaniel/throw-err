@@ -5,9 +5,18 @@ import { normalizeTypedError } from "../utils/normalizeError";
  * Represents an error result with metadata
  */
 export type ResultError<E extends Error = Error> = {
+  /** The error message */
   message: string;
+  /** The original error object */
   raw: E;
+  /** The error code used for categorization */
   code: ErrorCode;
+  /** The error name (typically the class name) */
+  name?: string;
+  /** The stack trace (if available) */
+  stack?: string;
+  /** The error that caused this error (if any) */
+  cause?: ResultError<Error>;
 };
 
 /**
@@ -38,6 +47,7 @@ export type Failure<E extends Error = Error> = {
  * @template E The error type (must extend Error)
  */
 export type Result<T, E extends Error = Error> = Success<T> | Failure<E>;
+
 
 /**
  * Helper functions for working with Result types
