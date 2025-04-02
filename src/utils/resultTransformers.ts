@@ -204,12 +204,7 @@ export function mapWith<T, U, E extends Error, M extends Error = E>(
  * }
  * ```
  */
-export async function mapWithAsync<
-  T,
-  U,
-  E extends Error,
-  M extends Error = E
->(
+export async function mapWithAsync<T, U, E extends Error, M extends Error = E>(
   result: Result<T, E>,
   mapper: MapperFnAsync<T, U, M>
 ): Promise<Result<U, E | M>> {
@@ -1183,7 +1178,6 @@ export function combineAll<T, E extends Error>(
   return Result.success(successes);
 }
 
-
 /**
  * Waits for multiple Result Promises to resolve and combines them
  * @template T The success data type for each Result
@@ -1253,14 +1247,14 @@ export async function sequenceResults<T, E extends Error>(
  * const result = await tryCatch(fetchUser, '123');
  *
  * // Transform both success and error cases
- * const transformed = transform(
+ * const transformed = match(
  *   result,
  *   user => ({ ...user, displayName: `${user.firstName} ${user.lastName}` }),
  *   err => new AppError(`Failed to fetch user: ${err.message}`)
  * );
  * ```
  */
-export function transform<T, U, E extends Error, F extends Error>(
+export function match<T, U, E extends Error, F extends Error>(
   result: Result<T, E>,
   successMapper: (data: T) => U,
   errorMapper: (error: E) => F
@@ -1313,7 +1307,7 @@ export function transform<T, U, E extends Error, F extends Error>(
  * const result = await tryCatchAsync(fetchUser, '123');
  *
  * // Transform both success and error cases asynchronously
- * const transformed = await transformAsync(
+ * const transformed = await matchAsync(
  *   result,
  *   async user => {
  *     const details = await fetchUserDetails(user.id);
@@ -1326,12 +1320,7 @@ export function transform<T, U, E extends Error, F extends Error>(
  * );
  * ```
  */
-export async function transformAsync<
-  T,
-  U,
-  E extends Error,
-  F extends Error
->(
+export async function matchAsync<T, U, E extends Error, F extends Error>(
   result: Result<T, E>,
   successMapper: (data: T) => Promise<U>,
   errorMapper: (error: E) => Promise<F>
@@ -1380,7 +1369,7 @@ export async function transformAsync<
  * - You need comprehensive type safety
  *
  * This is a more robust version of transform that handles errors thrown during mapping.
- * For async transformations, use transformWithAsync instead.
+ * For async transformations, use matchWithAsync instead.
  *
  * @example
  * ```typescript
@@ -1402,7 +1391,7 @@ export async function transformAsync<
  * });
  *
  * // Get a Result with comprehensive error typing
- * const result = transformWith(
+ * const result = matchWith(
  *   userResult,
  *   formatUser,
  *   convertToAppError
@@ -1412,7 +1401,7 @@ export async function transformAsync<
  * // Result<FormattedUser, AppError | FormatError | ConversionError>
  * ```
  */
-export function transformWith<
+export function matchWith<
   T,
   U,
   E extends Error,
@@ -1467,7 +1456,7 @@ export function transformWith<
  * - Your transformations might throw errors themselves
  * - You need comprehensive type safety for async operations
  *
- * This is the asynchronous version of transformWith for cases
+ * This is the asynchronous version of matchWith for cases
  * where your mapping functions need to perform async operations.
  *
  * @example
@@ -1492,14 +1481,14 @@ export function transformWith<
  * });
  *
  * // Get a Result with comprehensive error typing
- * const result = await transformWithAsync(
+ * const result = await matchWithAsync(
  *   userResult,
  *   formatUser,
  *   convertToAppError
  * );
  * ```
  */
-export async function transformWithAsync<
+export async function matchWithAsync<
   T,
   U,
   E extends Error,

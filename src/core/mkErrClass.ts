@@ -3,7 +3,7 @@ import { ErrorCode, CommonErrorCodes } from "./ErrorCode";
 /**
  * A strongly typed error with a unique `name` literal type.
  */
-export type NamedError<
+export type Err<
   T = Record<string, never>,
   Name extends string = string
 > = Error & {
@@ -20,7 +20,7 @@ export type NamedError<
 type ErrorClassReturn<T, Name extends string = string> = new (
   message: string,
   options?: { code?: ErrorCode; data?: T }
-) => NamedError<T, Name>;
+) => Err<T, Name>;
 
 /**
  * Creates a custom error class without additional typed properties
@@ -85,7 +85,6 @@ export function mkErrClass<
       super(message);
       this.code = options?.code ?? defaultCode ?? CommonErrorCodes.UNKNOWN;
       this.data = options?.data ?? (defaultData as T);
-      
 
       // This is needed for proper instanceof checks in transpiled ES5 code
       Object.setPrototypeOf(this, CustomError.prototype);

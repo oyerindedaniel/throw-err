@@ -24,8 +24,7 @@ export { ChainableResult, Success, Failure } from "./utils/chainableResult";
 export { asyncFn } from "./core/asyncFn";
 export { tryCatchAsync, tryCatch } from "./core/tryCatch";
 export { mkErrClass } from "./core/mkErrClass";
-export { withCode } from "./core/withCode";
-export { compose, composeFns, composeMany } from "./core/compose";
+export { pipe, compose } from "./core/compose";
 
 // Utility functions
 export {
@@ -41,10 +40,10 @@ export {
   recoverAsync,
   mapErr,
   mapErrAsync,
-  transform,
-  transformAsync,
-  transformWith,
-  transformWithAsync,
+  match,
+  matchAsync,
+  matchWith,
+  matchWithAsync,
   orElse,
   orElseAsync,
   filter,
@@ -60,7 +59,7 @@ export {
 
 export { CollectedErrors } from "./utils/customErrors";
 
-export { retry, timeout, TimeoutError } from "./utils/asyncUtils";
+export { createWrapper } from "./core/create-wrapper";
 
 // export { compose } from "./utils/compose";
 

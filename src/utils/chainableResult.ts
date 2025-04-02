@@ -13,7 +13,6 @@ import { asyncFn } from "../core/asyncFn";
 import { syncFn } from "../core/syncFn";
 import { CollectedErrors } from "./customErrors";
 
-
 /**
  * Union type representing either Success or Failure
  */
@@ -26,7 +25,7 @@ export type ChainableResultType<T, E extends Error = Error> =
 type NoInfer<T> = [T][T extends any ? 0 : never];
 
 /**
- * Success class that allows method chaining for Result transformations
+ * Success class that allows method chaining for Result matchations
  */
 
 export class Success<T> {
@@ -37,25 +36,43 @@ export class Success<T> {
   /** Maps the success value synchronously */
   map<U>(fn: (data: T) => U): ChainableResultType<U, never> {
     const result = tryCatch(syncFn<Error>()(() => fn(this.data)));
-    return result.success ? new Success(result.data) : new Failure(result.error) as unknown as ChainableResultType<U, never>;
+    return result.success
+      ? new Success(result.data)
+      : (new Failure(result.error) as unknown as ChainableResultType<U, never>);
   }
 
   /** Maps the success value asynchronously */
-  async mapAsync<U>(fn: (data: T) => Promise<U>): Promise<ChainableResultType<U, never>> {
-    const result = await tryCatchAsync(asyncFn<Error>()(async () => fn(this.data)));
-    return result.success ? new Success(result.data) : new Failure(result.error) as unknown as ChainableResultType<U, never>;
+  async mapAsync<U>(
+    fn: (data: T) => Promise<U>
+  ): Promise<ChainableResultType<U, never>> {
+    const result = await tryCatchAsync(
+      asyncFn<Error>()(async () => fn(this.data))
+    );
+    return result.success
+      ? new Success(result.data)
+      : (new Failure(result.error) as unknown as ChainableResultType<U, never>);
   }
 
   /** Maps the success value with a typed mapper */
-  mapWith<U, M extends Error>(mapper: MapperFn<T, U, M>): ChainableResultType<U, M> {
+  mapWith<U, M extends Error>(
+    mapper: MapperFn<T, U, M>
+  ): ChainableResultType<U, M> {
     const result = tryCatch(syncFn<M>()(() => mapper.fn(this.data)));
-    return result.success ? new Success(result.data) : new Failure(result.error);
+    return result.success
+      ? new Success(result.data)
+      : new Failure(result.error);
   }
 
   /** Maps the success value asynchronously with a typed mapper */
-  async mapWithAsync<U, M extends Error>(mapper: MapperFnAsync<T, U, M>): Promise<ChainableResultType<U, M>> {
-    const result = await tryCatchAsync(asyncFn<M>()(async () => mapper.fn(this.data)));
-    return result.success ? new Success(result.data) : new Failure(result.error);
+  async mapWithAsync<U, M extends Error>(
+    mapper: MapperFnAsync<T, U, M>
+  ): Promise<ChainableResultType<U, M>> {
+    const result = await tryCatchAsync(
+      asyncFn<M>()(async () => mapper.fn(this.data))
+    );
+    return result.success
+      ? new Success(result.data)
+      : new Failure(result.error);
   }
 
   /** Ignores error mapping */
@@ -69,45 +86,57 @@ export class Success<T> {
   }
 
   /** Chains with a Result-returning function synchronously */
-  flatMap<U, F extends Error>(fn: (data: T) => ResultType<U, F>): ChainableResultType<U, F> {
+  flatMap<U, F extends Error>(
+    fn: (data: T) => ResultType<U, F>
+  ): ChainableResultType<U, F> {
     const mappingResult = tryCatch(syncFn<Error>()(() => fn(this.data)));
 
-    if(mappingResult.success) {
-        const innerResult = mappingResult.data;
-      if(innerResult.success) {
+    if (mappingResult.success) {
+      const innerResult = mappingResult.data;
+      if (innerResult.success) {
         return new Success(innerResult.data);
       } else {
         return new Failure(innerResult.error);
       }
     } else {
-      return new Failure(mappingResult.error) as unknown as ChainableResultType<U, F>;
+      return new Failure(mappingResult.error) as unknown as ChainableResultType<
+        U,
+        F
+      >;
     }
-
-    
   }
 
   /** Chains with a Result-returning function asynchronously */
-  async flatMapAsync<U, F extends Error>(fn: (data: T) => Promise<ResultType<U, F>>): Promise<ChainableResultType<U, F>> {
-    const mappingResult = await tryCatchAsync(asyncFn<Error>()(async () => fn(this.data)));
+  async flatMapAsync<U, F extends Error>(
+    fn: (data: T) => Promise<ResultType<U, F>>
+  ): Promise<ChainableResultType<U, F>> {
+    const mappingResult = await tryCatchAsync(
+      asyncFn<Error>()(async () => fn(this.data))
+    );
 
-    if(mappingResult.success) {
+    if (mappingResult.success) {
       const innerResult = mappingResult.data;
-      if(innerResult.success) {
+      if (innerResult.success) {
         return new Success(innerResult.data);
-      } else { 
+      } else {
         return new Failure(innerResult.error);
       }
     } else {
-      return new Failure(mappingResult.error) as unknown as ChainableResultType<U, F>;
+      return new Failure(mappingResult.error) as unknown as ChainableResultType<
+        U,
+        F
+      >;
     }
   }
 
   /** Chains with a typed mapper returning a Result */
-  flatMapWith<U, F extends Error, M extends Error>(mapper: MapperFn<T, ResultType<U, F>, M>): ChainableResultType<U, F | M> {
+  flatMapWith<U, F extends Error, M extends Error>(
+    mapper: MapperFn<T, ResultType<U, F>, M>
+  ): ChainableResultType<U, F | M> {
     const result = tryCatch(syncFn<M>()(() => mapper.fn(this.data)));
-    if(result.success) {
+    if (result.success) {
       const innerResult = result.data;
-      if(innerResult.success) {
+      if (innerResult.success) {
         return new Success(innerResult.data);
       } else {
         return new Failure(innerResult.error);
@@ -118,11 +147,15 @@ export class Success<T> {
   }
 
   /** Chains with a typed mapper returning a Result asynchronously */
-  async flatMapWithAsync<U, F extends Error, M extends Error>(mapper: MapperFnAsync<T, ResultType<U, F>, M>): Promise<ChainableResultType<U, F | M>> {
-    const result = await tryCatchAsync(asyncFn<M>()(async () => mapper.fn(this.data)));
-    if(result.success) {
+  async flatMapWithAsync<U, F extends Error, M extends Error>(
+    mapper: MapperFnAsync<T, ResultType<U, F>, M>
+  ): Promise<ChainableResultType<U, F | M>> {
+    const result = await tryCatchAsync(
+      asyncFn<M>()(async () => mapper.fn(this.data))
+    );
+    if (result.success) {
       const innerResult = result.data;
-      if(innerResult.success) {
+      if (innerResult.success) {
         return new Success(innerResult.data);
       } else {
         return new Failure(innerResult.error);
@@ -133,28 +166,42 @@ export class Success<T> {
   }
 
   /** Ignores recovery operations */
-  recover<R, F extends Error, M extends Error>(): ChainableResultType<T, never> {
+  recover<R, F extends Error, M extends Error>(): ChainableResultType<
+    T,
+    never
+  > {
     return this;
   }
 
   /** Ignores async recovery operations */
-  async recoverAsync<R, F extends Error, M extends Error>(): Promise<ChainableResultType<T, never>> {
+  async recoverAsync<R, F extends Error, M extends Error>(): Promise<
+    ChainableResultType<T, never>
+  > {
     return this;
   }
 
   /** Provides a fallback value synchronously */
-  orElse<R>(fallback: R | ((error: ResultError<never>) => R)): ChainableResultType<T | R, never> {
+  orElse<R>(
+    fallback: R | ((error: ResultError<never>) => R)
+  ): ChainableResultType<T | R, never> {
     return this as ChainableResultType<T, never>;
   }
 
   /** Provides a fallback value asynchronously */
-  async orElseAsync<R>(fallback: R | Promise<R> | ((error: ResultError<never>) => R | Promise<R>)): Promise<ChainableResultType<T | R, never>> {
+  async orElseAsync<R>(
+    fallback: R | Promise<R> | ((error: ResultError<never>) => R | Promise<R>)
+  ): Promise<ChainableResultType<T | R, never>> {
     return this as ChainableResultType<T, never>;
   }
 
   /** Filters the success value */
-  filter<E extends Error>(predicate: (data: T) => boolean, errorFn: (data: T) => E): ChainableResultType<T, E> {
-    return predicate(this.data) ? this : new Failure(normalizeTypedError(errorFn(this.data)));
+  filter<E extends Error>(
+    predicate: (data: T) => boolean,
+    errorFn: (data: T) => E
+  ): ChainableResultType<T, E> {
+    return predicate(this.data)
+      ? this
+      : new Failure(normalizeTypedError(errorFn(this.data)));
   }
 
   /** Performs a side effect on success */
@@ -168,37 +215,67 @@ export class Success<T> {
     return this;
   }
 
-  /** Transforms both success and error values synchronously */
-  transform<U, F extends Error>(successMapper: (data: T) => U, _errorMapper?: (error: never) => F): ChainableResultType<U, F> {
+  /** Match both success and error values synchronously */
+  match<U, F extends Error>(
+    successMapper: (data: T) => U,
+    _errorMapper?: (error: never) => F
+  ): ChainableResultType<U, F> {
     const result = tryCatch(syncFn<F>()(() => successMapper(this.data)));
-    return result.success ? new Success(result.data) : new Failure(result.error);
+    return result.success
+      ? new Success(result.data)
+      : new Failure(result.error);
   }
 
-  /** Transforms both success and error values asynchronously */
-  async transformAsync<U, F extends Error>(successMapper: (data: T) => Promise<U>, _errorMapper?: (error: never) => Promise<F>): Promise<ChainableResultType<U, F>> {
-    const result = await tryCatchAsync(asyncFn<F>()(async () => successMapper(this.data)));
-    return result.success ? new Success(result.data) : new Failure(result.error);
+  /** Match both success and error values asynchronously */
+  async matchAsync<U, F extends Error>(
+    successMapper: (data: T) => Promise<U>,
+    _errorMapper?: (error: never) => Promise<F>
+  ): Promise<ChainableResultType<U, F>> {
+    const result = await tryCatchAsync(
+      asyncFn<F>()(async () => successMapper(this.data))
+    );
+    return result.success
+      ? new Success(result.data)
+      : new Failure(result.error);
   }
 
-  /** Transforms with typed mappers synchronously */
-  transformWith<U, F extends Error, MS extends Error, ME extends Error>(successMapper: MapperFn<T, U, MS>, _errorMapper: MapperFn<never, F, ME>): ChainableResultType<U, F | MS | ME> {
+  /** Match with typed mappers synchronously */
+  matchWith<U, F extends Error, MS extends Error, ME extends Error>(
+    successMapper: MapperFn<T, U, MS>,
+    _errorMapper: MapperFn<never, F, ME>
+  ): ChainableResultType<U, F | MS | ME> {
     const result = tryCatch(syncFn<MS>()(() => successMapper.fn(this.data)));
-    return result.success ? new Success(result.data) : new Failure(result.error);
+    return result.success
+      ? new Success(result.data)
+      : new Failure(result.error);
   }
 
-  /** Transforms with typed mappers asynchronously */
-  async transformWithAsync<U, F extends Error, MS extends Error, ME extends Error>(successMapper: MapperFnAsync<T, U, MS>, _errorMapper: MapperFnAsync<never, F, ME>): Promise<ChainableResultType<U, F | MS | ME>> {
-    const result = await tryCatchAsync(asyncFn<MS>()(async () => successMapper.fn(this.data)));
-    return result.success ? new Success(result.data) : new Failure(result.error);
+  /** Match with typed mappers asynchronously */
+  async matchWithAsync<U, F extends Error, MS extends Error, ME extends Error>(
+    successMapper: MapperFnAsync<T, U, MS>,
+    _errorMapper: MapperFnAsync<never, F, ME>
+  ): Promise<ChainableResultType<U, F | MS | ME>> {
+    const result = await tryCatchAsync(
+      asyncFn<MS>()(async () => successMapper.fn(this.data))
+    );
+    return result.success
+      ? new Success(result.data)
+      : new Failure(result.error);
   }
 
   /** Combines with another result */
-  combine<U, E extends Error>(other: ResultType<U, E>): ChainableResultType<[T, U], E> {
-    return other.success ? new Success([this.data, other.data]) : new Failure(other.error);
+  combine<U, E extends Error>(
+    other: ResultType<U, E>
+  ): ChainableResultType<[T, U], E> {
+    return other.success
+      ? new Success([this.data, other.data])
+      : new Failure(other.error);
   }
 
   /** Combines with multiple results */
-  combineAll<U, E extends Error>(others: ResultType<U, E>[]): ChainableResultType<[T, ...U[]], E> {
+  combineAll<U, E extends Error>(
+    others: ResultType<U, E>[]
+  ): ChainableResultType<[T, ...U[]], E> {
     const values: U[] = [];
     for (const result of others) {
       if (!result.success) return new Failure(result.error);
@@ -224,7 +301,7 @@ export class Success<T> {
 }
 
 /**
- * Failure class for chainable Result transformations
+ * Failure class for chainable Result matchations
  */
 export class Failure<E extends Error> {
   readonly success = false as const;
@@ -247,20 +324,30 @@ export class Failure<E extends Error> {
   }
 
   /** Ignores async typed success mapping */
-  async mapWithAsync<U, M extends Error>(): Promise<ChainableResultType<never, E>> {
+  async mapWithAsync<U, M extends Error>(): Promise<
+    ChainableResultType<never, E>
+  > {
     return this;
   }
 
   /** Maps the error synchronously */
   mapErr<F extends Error>(fn: (error: E) => F): ChainableResultType<never, F> {
     const result = tryCatch(syncFn<Error>()(() => fn(this.error.raw)));
-    return new Failure(result.success ? normalizeTypedError(result.data) : result.error) as unknown as ChainableResultType<never, F>;
+    return new Failure(
+      result.success ? normalizeTypedError(result.data) : result.error
+    ) as unknown as ChainableResultType<never, F>;
   }
 
   /** Maps the error asynchronously */
-  async mapErrAsync<F extends Error>(fn: (error: E) => Promise<F>): Promise<ChainableResultType<never, F>> {
-    const result = await tryCatchAsync(asyncFn<Error>()(async () => fn(this.error.raw)));
-    return new Failure(result.success ? normalizeTypedError(result.data) : result.error) as unknown as ChainableResultType<never, F>;
+  async mapErrAsync<F extends Error>(
+    fn: (error: E) => Promise<F>
+  ): Promise<ChainableResultType<never, F>> {
+    const result = await tryCatchAsync(
+      asyncFn<Error>()(async () => fn(this.error.raw))
+    );
+    return new Failure(
+      result.success ? normalizeTypedError(result.data) : result.error
+    ) as unknown as ChainableResultType<never, F>;
   }
 
   /** Ignores synchronous chaining */
@@ -269,26 +356,35 @@ export class Failure<E extends Error> {
   }
 
   /** Ignores async chaining */
-  async flatMapAsync<U, F extends Error>(): Promise<ChainableResultType<never, E>> {
+  async flatMapAsync<U, F extends Error>(): Promise<
+    ChainableResultType<never, E>
+  > {
     return this;
   }
 
   /** Ignores typed chaining */
-  flatMapWith<U, F extends Error, M extends Error>(): ChainableResultType<never, E> {
+  flatMapWith<U, F extends Error, M extends Error>(): ChainableResultType<
+    never,
+    E
+  > {
     return this;
   }
 
   /** Ignores async typed chaining */
-  async flatMapWithAsync<U, F extends Error, M extends Error>(): Promise<ChainableResultType<never, E>> {
+  async flatMapWithAsync<U, F extends Error, M extends Error>(): Promise<
+    ChainableResultType<never, E>
+  > {
     return this;
   }
 
   /** Recovers from the error synchronously */
-  recover<R, F extends Error, M extends Error>(mapper: MapperFn<ResultError<E>, ResultType<R, F>, M>): ChainableResultType<R, F | M> {
+  recover<R, F extends Error, M extends Error>(
+    mapper: MapperFn<ResultError<E>, ResultType<R, F>, M>
+  ): ChainableResultType<R, F | M> {
     const result = tryCatch(syncFn<M>()(() => mapper.fn(this.error)));
-    if(result.success) {
+    if (result.success) {
       const innerResult = result.data;
-      if(innerResult.success) {
+      if (innerResult.success) {
         return new Success(innerResult.data);
       } else {
         return new Failure(innerResult.error);
@@ -299,11 +395,15 @@ export class Failure<E extends Error> {
   }
 
   /** Recovers from the error asynchronously */
-  async recoverAsync<R, F extends Error, M extends Error>(mapper: MapperFnAsync<ResultError<E>,   ResultType<R, F>, M>): Promise<ChainableResultType<R, F | M>> {
-    const result = await tryCatchAsync(asyncFn<M>()(async () => mapper.fn(this.error)));
-    if(result.success) {
+  async recoverAsync<R, F extends Error, M extends Error>(
+    mapper: MapperFnAsync<ResultError<E>, ResultType<R, F>, M>
+  ): Promise<ChainableResultType<R, F | M>> {
+    const result = await tryCatchAsync(
+      asyncFn<M>()(async () => mapper.fn(this.error))
+    );
+    if (result.success) {
       const innerResult = result.data;
-      if(innerResult.success) {
+      if (innerResult.success) {
         return new Success(innerResult.data);
       } else {
         return new Failure(innerResult.error);
@@ -314,18 +414,31 @@ export class Failure<E extends Error> {
   }
 
   /** Provides a fallback value synchronously */
-  orElse<R>(fallback: R | ((error: ResultError<E>) => R)): ChainableResultType<R, never> {
-    const value = typeof fallback === "function" ? (fallback as (e: ResultError<E>) => R)(this.error) : fallback;
+  orElse<R>(
+    fallback: R | ((error: ResultError<E>) => R)
+  ): ChainableResultType<R, never> {
+    const value =
+      typeof fallback === "function"
+        ? (fallback as (e: ResultError<E>) => R)(this.error)
+        : fallback;
     return new Success(value);
   }
 
   /** Provides a fallback value asynchronously */
-  async orElseAsync<R>(fallback: R | Promise<R> | ((error: ResultError<E>) => R | Promise<R>)): Promise<ChainableResultType<R, never>> {
+  async orElseAsync<R>(
+    fallback: R | Promise<R> | ((error: ResultError<E>) => R | Promise<R>)
+  ): Promise<ChainableResultType<R, never>> {
     if (typeof fallback === "function") {
-      const result = await tryCatchAsync(asyncFn<Error>()(async () => (fallback as (e: ResultError<E>) => Promise<R>)(this.error)));
+      const result = await tryCatchAsync(
+        asyncFn<Error>()(async () =>
+          (fallback as (e: ResultError<E>) => Promise<R>)(this.error)
+        )
+      );
       return new Success(result.success ? result.data : ({} as R));
     }
-    const result = await tryCatchAsync(asyncFn<Error>()(async () => Promise.resolve(fallback)));
+    const result = await tryCatchAsync(
+      asyncFn<Error>()(async () => Promise.resolve(fallback))
+    );
     return new Success(result.success ? result.data : ({} as R));
   }
 
@@ -345,28 +458,52 @@ export class Failure<E extends Error> {
     return this;
   }
 
-  /** Transforms both success and error values synchronously */
-  transform<U, F extends Error>(_successMapper: (data: never) => U, errorMapper: (error: E) => F): ChainableResultType<U, F> {
+  /** Match both success and error values synchronously */
+  match<U, F extends Error>(
+    _successMapper: (data: never) => U,
+    errorMapper: (error: E) => F
+  ): ChainableResultType<U, F> {
     const result = tryCatch(syncFn<Error>()(() => errorMapper(this.error.raw)));
-    return result.success ? new Failure(normalizeTypedError(result.data)) : new Failure(result.error) as unknown as ChainableResultType<U, F>;
+    return result.success
+      ? new Failure(normalizeTypedError(result.data))
+      : (new Failure(result.error) as unknown as ChainableResultType<U, F>);
   }
 
-  /** Transforms both success and error values asynchronously */
-  async transformAsync<U, F extends Error>(_successMapper: (data: never) => Promise<U>, errorMapper: (error: E) => Promise<F>): Promise<ChainableResultType<U, F>> {
-    const result = await tryCatchAsync(asyncFn<Error>()(async () => errorMapper(this.error.raw)));
-    return result.success ? new Failure(normalizeTypedError(result.data)) : new Failure(result.error) as unknown as ChainableResultType<U, F>;
+  /** Match both success and error values asynchronously */
+  async matchAsync<U, F extends Error>(
+    _successMapper: (data: never) => Promise<U>,
+    errorMapper: (error: E) => Promise<F>
+  ): Promise<ChainableResultType<U, F>> {
+    const result = await tryCatchAsync(
+      asyncFn<Error>()(async () => errorMapper(this.error.raw))
+    );
+    return result.success
+      ? new Failure(normalizeTypedError(result.data))
+      : (new Failure(result.error) as unknown as ChainableResultType<U, F>);
   }
 
-  /** Transforms with typed mappers synchronously */
-  transformWith<U, F extends Error, MS extends Error, ME extends Error>(_successMapper: MapperFn<never, U, MS>, errorMapper: MapperFn<E, F, ME>): ChainableResultType<U, F | MS | ME> {
+  /** Match with typed mappers synchronously */
+  matchWith<U, F extends Error, MS extends Error, ME extends Error>(
+    _successMapper: MapperFn<never, U, MS>,
+    errorMapper: MapperFn<E, F, ME>
+  ): ChainableResultType<U, F | MS | ME> {
     const result = tryCatch(syncFn<ME>()(() => errorMapper.fn(this.error.raw)));
-    return result.success ? new Failure(normalizeTypedError(result.data)) : new Failure(result.error);
+    return result.success
+      ? new Failure(normalizeTypedError(result.data))
+      : new Failure(result.error);
   }
 
-  /** Transforms with typed mappers asynchronously */
-  async transformWithAsync<U, F extends Error, MS extends Error, ME extends Error>(_successMapper: MapperFnAsync<never, U, MS>, errorMapper: MapperFnAsync<E, F, ME>): Promise<ChainableResultType<U, F | MS | ME>> {
-    const result = await tryCatchAsync(asyncFn<ME>()(async () => errorMapper.fn(this.error.raw)));
-    return result.success ? new Failure(normalizeTypedError(result.data)) : new Failure(result.error);
+  /** Match with typed mappers asynchronously */
+  async matchWithAsync<U, F extends Error, MS extends Error, ME extends Error>(
+    _successMapper: MapperFnAsync<never, U, MS>,
+    errorMapper: MapperFnAsync<E, F, ME>
+  ): Promise<ChainableResultType<U, F | MS | ME>> {
+    const result = await tryCatchAsync(
+      asyncFn<ME>()(async () => errorMapper.fn(this.error.raw))
+    );
+    return result.success
+      ? new Failure(normalizeTypedError(result.data))
+      : new Failure(result.error);
   }
 
   /** Always fails when combining */
@@ -394,7 +531,6 @@ export class Failure<E extends Error> {
     return { success: false, error: this.error };
   }
 }
-
 
 /**
  * ChainableResult class with static methods for creating and manipulating chainable results
@@ -427,7 +563,9 @@ export class ChainableResult {
   static fromResult<T, E extends Error>(
     result: ResultType<T, E>
   ): ChainableResultType<T, E> {
-    return result.success ? new Success(result.data) : new Failure(result.error);
+    return result.success
+      ? new Success(result.data)
+      : new Failure(result.error);
   }
 
   /**
@@ -539,7 +677,11 @@ export class ChainableResult {
   /**
    * Executes a wrapped asynchronous function with tryCatchAsync and returns a ChainableResult
    */
-  static async tryCatchAsync<T, E extends Error, Args extends readonly unknown[]>(
+  static async tryCatchAsync<
+    T,
+    E extends Error,
+    Args extends readonly unknown[]
+  >(
     wrappedFn: AsyncFnWithErr<T, E, Args>,
     ...args: Args
   ): Promise<ChainableResultType<T, E>> {
