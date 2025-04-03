@@ -49,7 +49,7 @@ export async function tryCatchAsync<
  * ```typescript
  * const parseJson = (text: string) => JSON.parse(text);
  * const wrappedParseJson = syncFn<SyntaxError>()(parseJson);
- * const result = tryCatchSync(wrappedParseJson, '{"name": "John"}');
+ * const result = tryCatch(wrappedParseJson, '{"name": "John"}');
  * if (result.success) {
  *   console.log(result.data);
  * } else {
@@ -57,11 +57,10 @@ export async function tryCatchAsync<
  * }
  * ```
  */
-export function tryCatchSync<
-  T,
-  E extends Error,
-  Args extends readonly unknown[]
->(wrappedFn: SyncFnWithErr<T, E, Args>, ...args: Args): Result<T, E> {
+export function tryCatch<T, E extends Error, Args extends readonly unknown[]>(
+  wrappedFn: SyncFnWithErr<T, E, Args>,
+  ...args: Args
+): Result<T, E> {
   try {
     const data = wrappedFn.fn(...args);
     return { success: true, data } as Result<T, never>;

@@ -25,8 +25,10 @@ export function normalizeError<E extends Error = Error>(
     const typedError = error as E;
     return {
       raw: typedError,
+      stack: typedError.stack,
       message: typedError.message,
       code: getErrorCode(typedError),
+      
     };
   }
 
@@ -38,6 +40,7 @@ export function normalizeError<E extends Error = Error>(
   return {
     raw: wrappedError,
     message: wrappedError.message,
+    stack: wrappedError.stack,
     code: CommonErrorCodes.UNKNOWN,
   };
 }
@@ -50,6 +53,7 @@ export function normalizeTypedError<T extends Error>(error: T): ResultError<T> {
   return {
     raw: error,
     message: error.message,
+    stack: error.stack,
     code: getErrorCode(error),
   };
 }

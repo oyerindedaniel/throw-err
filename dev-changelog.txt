@@ -1,0 +1,27 @@
+map, mapAsync, mapWithMapper, mapWithMapperAsync:
+Renamed mapWithMapper to mapWith and mapWithMapperAsync to mapWithAsync for brevity.
+
+mapErr, mapErrAsync:
+Kept mapErr as-is, added mapErrAsync.
+
+flatMap, flatMapAsync, flatMapWithMapper, flatMapWithMapperAsync:
+Renamed flatMapWithMapper to flatMapWith and flatMapWithMapperAsync to flatMapWithAsync.
+
+recoverWithMapper, recoverWithMapperAsync:
+Renamed to recover and recoverAsync for simplicity.
+
+recoverWithDefault, recoverWithDefaultAsync:
+Renamed to orElse and orElseAsync (common in functional programming).
+
+filterResult:
+Renamed to filter (already present in your chainable API).
+
+tap, tapError:
+Renamed tapError to tapErr for consistency with mapErr.
+
+transformBoth, transformBothAsync, transformBothWithMappers, transformBothWithMappersAsync:
+Renamed transformBothWithMappers to transformWith and transformBothWithMappersAsync to transformWithAsync.
+
+getOrElse, toPromise:
+Kept names as-is, implemented in both classes.
+

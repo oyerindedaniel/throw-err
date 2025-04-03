@@ -1,11 +1,11 @@
 import {
   asyncFn,
   tryCatchAsync,
-  mapResult,
-  flatMapResult,
   mkErrClass,
   mapperFn,
   isErrorType,
+  mapWith,
+  flatMapWithAsync,
 } from "..";
 
 // Custom error types
@@ -13,7 +13,7 @@ interface ApiErrorData extends Record<string, unknown> {
   status: number;
   url: string;
 }
-const ApiError = mkErrClass<ApiErrorData>("ApiError", "API_ERROR", {
+const ApiError = mkErrClass<ApiErrorData, "ApiError">("ApiError", "API_ERROR", {
   status: 0,
   url: "",
 });
@@ -59,9 +59,10 @@ async function run() {
   console.log("Fetching users...");
   const result = await tryCatchAsync(fetchUsers);
 
+
   // 1. Create a mapper function that might throw ValidationError
   const validateUsers = mapperFn<ValidationErrorInstance>()(
-    (users: unknown[]) => {
+    (users: User[]) => {
       if (!Array.isArray(users)) {
         throw new ValidationError("Expected users array");
       }
@@ -78,7 +79,7 @@ async function run() {
   // 2. Map the result with our typed mapper function
   // - Type safety is automatic - no need to specify ValidationError as a type parameter
   // - Error types are tracked in the type system
-  const validatedResult = await mapResult(result, validateUsers);
+  const validatedResult = await mapWith(result, validateUsers);
 
   // 3. Create a formatter mapper that returns a Result
   const formatUsers = mapperFn<FormatErrorInstance>()((users: User[]) => {
@@ -104,7 +105,7 @@ async function run() {
   // 4. Transform the validated result with flatMapResult
   // - Again, no need to specify error types manually
   // - All three possible errors are tracked: ApiError, ValidationError, FormatError
-  const formattedResult = await flatMapResult(validatedResult, formatUsers);
+  const formattedResult = await flatMapWithAsync(validatedResult, formatUsers);
 
   // 5. Type-safe error handling with proper narrowing
   if (formattedResult.success) {

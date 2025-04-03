@@ -1,6 +1,6 @@
 import {
   asyncFn,
-  tryCatch,
+  tryCatchAsync,
   mkErrClass,
   normalizeError,
   normalizeTypedError,
@@ -13,7 +13,7 @@ interface ApiErrorData extends Record<string, unknown> {
   url: string;
 }
 
-const ApiError = mkErrClass<ApiErrorData>("ApiError", "API_ERROR", {
+const ApiError = mkErrClass<ApiErrorData, "ApiError">("ApiError", "API_ERROR", {
   status: 0,
   url: "",
 });
@@ -95,7 +95,7 @@ async function demonstrateNormalization() {
 
     for (const id of ids) {
       console.log(`\nAttempting to fetch data with ID: ${id}`);
-      const result = await tryCatch(wrappedFetch, id);
+      const result = await tryCatchAsync(wrappedFetch, id);
 
       if (result.success) {
         console.log("✅ Success:", result.data);
@@ -113,7 +113,7 @@ async function demonstrateNormalization() {
 
     // Example 5: Checking for ResultError
     console.log("\n5. Using isResultError helper:");
-    const validResult = await tryCatch(wrappedFetch, "error");
+    const validResult = await tryCatchAsync(wrappedFetch, "error");
     console.log("Is validResult a ResultError?", isResultError(validResult));
     console.log(
       "Is validResult.error a ResultError?",

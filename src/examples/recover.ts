@@ -2,10 +2,11 @@ import {
   tryCatchAsync,
   Result,
   asyncFn,
-  recover,
   mkErrClass,
   isErrorType,
   CommonErrorCodes,
+  orElse,
+  orElseAsync,
 } from "..";
 
 // Example domain entities
@@ -28,13 +29,13 @@ interface WorkflowResult {
 }
 
 // Use mkErrClass to create our error types
-const NotFoundError = mkErrClass<{ entityType: string; id: string }>(
+const NotFoundError = mkErrClass<{ entityType: string; id: string }, "NotFoundError">(
   "NotFoundError",
   CommonErrorCodes.NOT_FOUND,
   { entityType: "", id: "" }
 );
 
-const NetworkError = mkErrClass<{ endpoint?: string }>(
+const NetworkError = mkErrClass<{ endpoint?: string }, "NetworkError">(
   "NetworkError",
   CommonErrorCodes.NETWORK,
   { endpoint: undefined }
@@ -99,7 +100,7 @@ async function getUserProfile(userId: string) {
   const userResult = await tryCatchAsync(fetchUser, userId);
 
   // If user fetch fails, recover with a guest user
-  const safeUser = recover.sync(userResult, {
+  const safeUser = orElse(userResult, {
     id: "guest",
     name: "Guest User",
     email: "guest@example.com",
@@ -117,7 +118,7 @@ async function getUserWithErrorContext(userId: string) {
   const userResult = await tryCatchAsync(fetchUser, userId);
 
   // Use error information to provide more context in the fallback
-  const safeUser = recover.sync(userResult, (err) => {
+  const safeUser = orElse(userResult, (err) => {
     console.log(`Encountered error: ${err.message}`);
 
     // Create custom guest user based on error type
@@ -153,7 +154,7 @@ async function getUserPostsWithCache(userId: string) {
   const postsResult = await tryCatchAsync(fetchUserPosts, userId);
 
   // If API call fails, try to use cached data or generate empty posts
-  const safePosts = await recover.async(postsResult, async (err) => {
+  const safePosts = await orElseAsync(postsResult, async (err) => {
     const endpoint =
       isErrorType(err.raw, NetworkError) && err.raw.data.endpoint
         ? err.raw.data.endpoint
@@ -190,7 +191,7 @@ async function completeUserWorkflow(userId: string) {
 
   // Get user profile with fallback
   const userResult = await tryCatchAsync(fetchUser, userId);
-  const safeUser = recover.sync(userResult, {
+  const safeUser = orElse(userResult, {
     id: "guest",
     name: "Guest User",
     email: "guest@example.com",
@@ -200,7 +201,7 @@ async function completeUserWorkflow(userId: string) {
 
   // Get user posts with fallback
   const postsResult = await tryCatchAsync(fetchUserPosts, user.id);
-  const safePosts = await recover.async(postsResult, async () => {
+  const safePosts = await orElseAsync(postsResult, async () => {
     return [] as Post[];
   });
 

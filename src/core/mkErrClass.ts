@@ -1,13 +1,26 @@
 import { ErrorCode, CommonErrorCodes } from "./ErrorCode";
 
-type ErrorClassReturn<T> = new (
-  message: string,
-  options?: { code?: ErrorCode; data?: T }
-) => Error & {
-  name: string;
+/**
+ * A strongly typed error with a unique `name` literal type.
+ */
+export type Err<
+  T = Record<string, never>,
+  Name extends string = string
+> = Error & {
+  name: Name;
   code: ErrorCode;
   data: T;
 };
+
+/**
+ * Defines the return type of an error class.
+ * @template Name The unique error name
+ * @template T The additional error data
+ */
+type ErrorClassReturn<T, Name extends string = string> = new (
+  message: string,
+  options?: { code?: ErrorCode; data?: T }
+) => Err<T, Name>;
 
 /**
  * Creates a custom error class without additional typed properties
@@ -15,24 +28,25 @@ type ErrorClassReturn<T> = new (
  * @param defaultCode The default error code
  * @returns A custom error class
  */
-export function mkErrClass(
-  name: string,
+export function mkErrClass<Name extends string>(
+  name: Name,
   defaultCode: ErrorCode
-): ErrorClassReturn<Record<string, never>>;
+): ErrorClassReturn<Record<string, never>, Name>;
 
 /**
  * Creates a custom error class with additional typed properties
+ * @template Name The name of the error class
  * @template T The type of additional properties
  * @param name The name of the error class
  * @param defaultCode The default error code
  * @param defaultData The default data to use when no data is provided (required)
  * @returns A custom error class
  */
-export function mkErrClass<T extends object>(
-  name: string,
-  defaultCode: ErrorCode | undefined,
+export function mkErrClass<T extends object, Name extends string>(
+  name: Name,
+  defaultCode: ErrorCode,
   defaultData: T
-): ErrorClassReturn<T>;
+): ErrorClassReturn<T, Name>;
 
 /**
  * Implementation of mkErrClass
@@ -54,18 +68,18 @@ export function mkErrClass<T extends object>(
  * const SimpleError = mkErrClass('SimpleError', 'SIMPLE_ERROR');
  * ```
  */
-export function mkErrClass<T extends object = Record<never, never>>(
-  name: string,
+export function mkErrClass<
+  T extends object = Record<never, never>,
+  Name extends string = string
+>(
+  name: Name,
   defaultCode?: ErrorCode,
   defaultData?: T
-): ErrorClassReturn<T> {
+): ErrorClassReturn<T, Name> {
   return class CustomError extends Error {
-    public readonly name: string = name;
+    public readonly name: Name = name;
     public readonly code: ErrorCode;
     public readonly data: T;
-
-    // Not used at runtime, only for compile-time type checking
-    readonly _errorType?: CustomError;
 
     constructor(message: string, options?: { code?: ErrorCode; data?: T }) {
       super(message);

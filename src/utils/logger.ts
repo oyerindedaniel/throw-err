@@ -3,6 +3,8 @@
  * This utility helps debug composition chains and function wrappers
  */
 
+import { normalizeError } from "./normalizeError";
+
 /**
  * Log levels for controlling verbosity
  */
@@ -23,7 +25,7 @@ export const loggerConfig = {
    * Current log level - controls which messages are displayed
    * Default to NONE in production, can be set higher in development
    */
-  level: process.env.NODE_ENV === "production" ? LogLevel.NONE : LogLevel.INFO,
+  level: process.env.NODE_ENV === "production" ? LogLevel.NONE : LogLevel.TRACE,
 
   /**
    * Enable/disable function tracing (entry/exit logs)
@@ -184,11 +186,7 @@ export function withLogging<T, Args extends unknown[]>(
       logger.endTrace(result);
       return result;
     } catch (error) {
-      logger.error(
-        `Function failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      logger.error(`Function failed: ${normalizeError(error).message}`);
       logger.endTrace(error);
       throw error;
     }
@@ -196,7 +194,7 @@ export function withLogging<T, Args extends unknown[]>(
 }
 
 /**
- * Create a wrapper function that adds logging to any AsyncFnWithErr
+ * Create a wrapper function that adds logging to any AsyncFnWithErr/SyncFnWithErr
  * Useful for composition chains
  */
 export function createLoggingWrapper(wrapperName: string) {
@@ -214,11 +212,7 @@ export function createLoggingWrapper(wrapperName: string) {
         logger.endTrace(result);
         return result;
       } catch (error) {
-        logger.error(
-          `Function failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+        logger.error(`Function failed: ${normalizeError(error).message}`);
         logger.endTrace(error);
         throw error;
       }
