@@ -1,4 +1,4 @@
-# throw-err
+# throw-err (outdated)
 
 A TypeScript error handling utility that maintains proper type inference for errors in async functions.
 
@@ -159,7 +159,7 @@ if (result.success) {
 }
 ```
 
-## Installation
+## Installation (WIP)
 
 ```bash
 npm install throw-err
