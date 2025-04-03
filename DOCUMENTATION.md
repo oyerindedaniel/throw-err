@@ -1,4 +1,4 @@
-# throw-err Documentation
+# throw-err Documentation (outdated)
 
 ## Table of Contents
 
